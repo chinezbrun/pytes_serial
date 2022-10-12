@@ -1,0 +1,1 @@
+{"pytes": [{"power": 1, "voltage": 53.098, "current": -0.612, "temperature": 23.0, "soc": 73, "basic_st": "Dischg", "volt_st": "Normal", "current_st": "Normal", "temp_st": "Normal", "soh_st": "Normal", "coul_st": "Normal", "heater_st": "OFF  ", "bat_events": 0, "power_events": 0, "sys_events": 0}]}
