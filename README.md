@@ -2,7 +2,7 @@
  Program is reading RS232 serial port of PYTES LiFePo4 batteries
  
 ### How does this software work?
- 'pwr' commands is used 
+ "pwr" commands is used.
 Program reads PYTES serial with a specific freqvency, parsing the data and saving a JSON file that
 can be used in further automation. 
 
