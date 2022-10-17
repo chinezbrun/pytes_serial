@@ -26,7 +26,7 @@ start_time      = time.time()
 up_time         = time.time()
 pwr             = []                                  # used to serialise JSON data
 
-print('PytesSerial build: v0.1.3_20221012')
+print('PytesSerial build: v0.1.4_20221016')
 errors = 'false'
 
 # ------------------------functions area------------------------
@@ -47,10 +47,10 @@ def parsing_serial():
                 else:
                     print('...nothing received, trying again')
                     break
-                if line_str[1:18] == 'Voltage         :': voltage      = int(line_str[-17:-12])/1000
-                if line_str[1:18] == 'Current         :': current      = int(line_str[-17:-12])/1000
-                if line_str[1:18] == 'Temperature     :': temp         = int(line_str[-17:-12])/1000
-                if line_str[1:18] == 'Coulomb         :': soc          = int(line_str[-17:-12])
+                if line_str[1:18] == 'Voltage         :': voltage      = int(line_str[-17:-11])/1000
+                if line_str[1:18] == 'Current         :': current      = int(line_str[-17:-11])/1000
+                if line_str[1:18] == 'Temperature     :': temp         = int(line_str[-17:-11])/1000
+                if line_str[1:18] == 'Coulomb         :': soc          = int(line_str[-17:-11])
                 if line_str[1:18] == 'Basic Status    :': basic_st     = line_str[-11:-5]        
                 if line_str[1:18] == 'Volt Status     :': volt_st      = line_str[-11:-5]      
                 if line_str[1:18] == 'Current Status  :': current_st   = line_str[-11:-5]     
@@ -111,7 +111,7 @@ def parsing_serial():
 def json_serialize():
     global errors
     try:
-        json_data={'pytes':pwr}
+        json_data={'relay_local_time':TimeStamp, 'serial_uptime':uptime, 'pytes':pwr}
         with open(output_path + 'pytes_status.json', 'w') as outfile:
             json.dump(json_data, outfile)
         print('...json creation:  ok')    
@@ -186,11 +186,11 @@ while True:
     if (time.time() - start_time) > reading_freq:                     #try every x sec
         now            = datetime.datetime.now()
         TimeStamp      = now.strftime("%Y-%m-%d %H:%M:%S")       
-        print ('time stamp      :', TimeStamp)
+        print ('relay local time:', TimeStamp)
         
         start_time            = time.time() 
         uptime = round((time.time()- up_time)/86400,3)
-        print('script uptime   :',uptime)
+        print ('serial uptime   :', uptime)
 
         if errors == 'false':
             parsing_serial()
