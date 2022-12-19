@@ -31,6 +31,7 @@ USE `pytes`;
 --
 
 CREATE TABLE `pwr_data` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
   `record_time` datetime NOT NULL DEFAULT current_timestamp(),
   `power` int(11) NOT NULL,
   `voltage` float NOT NULL,
@@ -46,7 +47,10 @@ CREATE TABLE `pwr_data` (
   `heater_st` varchar(11) NOT NULL,
   `bat_events` int(11) NOT NULL,
   `power_events` int(11) NOT NULL,
-  `sys_events` int(11) NOT NULL
+  `sys_events` int(11) NOT NULL,
+   CONSTRAINT id PRIMARY KEY (id)
+  
+
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 COMMIT;
 
