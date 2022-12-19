@@ -33,7 +33,7 @@ loops_no              = 0                                   # used to count no o
 errors_no             = 0                                   # used to count no of errors and to calculate % 
 errors = 'false'
 
-print('PytesSerial build: v0.2.0_20221211')
+print('PytesSerial build: v0.2.1_20221219')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -58,7 +58,6 @@ def parsing_serial():
             line_str       = ""                                       # clear line_str
             line           = ""                                       # clear line            
             power_bytes    = bytes(str(power), 'ascii')               # convert to bytes
-            
             ser.write(b'pwr '+ power_bytes + b'\n')                   # write on serial port 'pwr x' command
             ser.flush()                                     
             
@@ -74,27 +73,27 @@ def parsing_serial():
                     print('...suspicious data set, trying again')                    
                     errors = 'true'                                                          
                     
-                    #log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line_str))               # [DPO] for debug purpose remark the line
+                    log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line))               # [DPO] for debug purpose remark the line
                     
                     if ser.is_open == True:
                         ser.close()
                         print ('...serial closed')
                     return                                                                    # do not move forward if no end of the parsing group detected                       
 
-                if line_str[1:18] == 'Voltage         :': voltage      = int(line_str[-17:-11])/1000
-                if line_str[1:18] == 'Current         :': current      = int(line_str[-17:-11])/1000
-                if line_str[1:18] == 'Temperature     :': temp         = int(line_str[-17:-11])/1000
-                if line_str[1:18] == 'Coulomb         :': soc          = int(line_str[-17:-11])
-                if line_str[1:18] == 'Basic Status    :': basic_st     = line_str[-11:-5]        
-                if line_str[1:18] == 'Volt Status     :': volt_st      = line_str[-11:-5]      
-                if line_str[1:18] == 'Current Status  :': current_st   = line_str[-11:-5]     
-                if line_str[1:18] == 'Tmpr. Status    :': temp_st      = line_str[-11:-5]     
-                if line_str[1:18] == 'Coul. Status    :': coul_st      = line_str[-11:-5]
-                if line_str[1:18] == 'Soh. Status     :': soh_st       = line_str[-11:-5]
-                if line_str[1:18] == 'Heater Status   :': heater_st    = line_str[-10:-5]
-                if line_str[1:18] == 'Bat Events      :': bat_events   = int(line_str[-15:-10],16)
-                if line_str[1:18] == 'Power Events    :': power_events = int(line_str[-15:-10],16)
-                if line_str[1:18] == 'System Fault    :': sys_events   = int(line_str[-15:-10],16)       
+                if line_str[1:18] == 'Voltage         :': voltage      = int(line_str[19:27])/1000
+                if line_str[1:18] == 'Current         :': current      = int(line_str[19:27])/1000
+                if line_str[1:18] == 'Temperature     :': temp         = int(line_str[19:27])/1000
+                if line_str[1:18] == 'Coulomb         :': soc          = int(line_str[19:27])
+                if line_str[1:18] == 'Basic Status    :': basic_st     = line_str[19:27]        
+                if line_str[1:18] == 'Volt Status     :': volt_st      = line_str[19:27]      
+                if line_str[1:18] == 'Current Status  :': current_st   = line_str[19:27]    
+                if line_str[1:18] == 'Tmpr. Status    :': temp_st      = line_str[19:27]     
+                if line_str[1:18] == 'Coul. Status    :': coul_st      = line_str[19:27]
+                if line_str[1:18] == 'Soh. Status     :': soh_st       = line_str[19:27]
+                if line_str[1:18] == 'Heater Status   :': heater_st    = line_str[19:27]
+                if line_str[1:18] == 'Bat Events      :': bat_events   = int(line_str[19:27],16)
+                if line_str[1:18] == 'Power Events    :': power_events = int(line_str[19:27],16)
+                if line_str[1:18] == 'System Fault    :': sys_events   = int(line_str[19:27],16)       
                 if line_str[1:18] == 'Command completed':
                     break
 
@@ -113,7 +112,8 @@ def parsing_serial():
             print ('bat_events      :', bat_events)
             print ('power_events    :', power_events)
             print ('sys_fault       :', sys_events)              
-
+            print ('---------------------------')
+            
             pwr_array = {
                 'power': power,
                 'voltage': voltage,
@@ -133,22 +133,19 @@ def parsing_serial():
                 
             pwr.append(pwr_array)
 
-            if ser.is_open == True:
-                ser.close()
-                print ('...serial closed')
-                
-            print ('...serial parsing: ok')
-            
         except Exception as e:
             print("...serial parsing error: " + str(e))
             errors = 'true'
                     
-            #log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line_str))               # [DPO] for debug purpose remark the line
+            log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line))               # [DPO] for debug purpose remark the line
             
             if ser.is_open == True:
                 ser.close()
                 print ('...serial closed')
-                
+            return
+        
+    print ('...serial parsing: ok')                
+
 def json_serialize():
     global errors
     global json_data
@@ -207,7 +204,7 @@ def maria_db():
         print ('...mariadb upload: ok')
         
     except Exception as e:
-        print('...mariadb writing error: ')
+        print('...mariadb writing error: '+ str(e))
 
 def mqtt_discovery():
     msg          ={} 
