@@ -34,3 +34,5 @@ Serial cable must be connected to battery 1 (master).
 6. execute pytes_serial.sh to have a separate terminal instance (works for Linux/Raspberry) or python3 pytes_serial.py directly from console
 
 enjoy
+
+Thanks to [valimircea-popescu](https://github.com/valimircea-popescu) for conducting the testing on Pylontech batteries.
