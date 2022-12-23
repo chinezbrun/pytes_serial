@@ -33,7 +33,7 @@ loops_no              = 0                                   # used to count no o
 errors_no             = 0                                   # used to count no of errors and to calculate % 
 errors = 'false'
 
-print('PytesSerial build: v0.2.1_20221219')
+print('PytesSerial build: v0.2.2_20221223')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -207,39 +207,48 @@ def maria_db():
         print('...mariadb writing error: '+ str(e))
 
 def mqtt_discovery():
-    msg          ={} 
-    config       = 1
-    names        =["pytes_current", "pytes_voltage" , "pytes_temperature", "pytes_soc", "pytes_status"]
-    ids          =["current", "voltage" , "temperature", "soc", "basic_st"] #do not change the prefix "pytes_"
-    dev_cla      =["current", "voltage", "temperature", "battery","None"]
-    unit_of_meas =["A","v","°C", "%",""]
-    
-    for power in range (1, powers+1):
-        for n in range(5):
-            state_topic          ="homeassistant/sensor/pytes/"+str(config)+"/config"
-            msg ["name"]         = names[n]+"_"+str(power)         
-            msg ["stat_t"]       = "homeassistant/sensor/pytes/state"
-            msg ["uniq_id"]      = "pytes_"+ids[n]+"_"+str(power)
-            if dev_cla[n] != "None":
-                msg ["dev_cla"]  = dev_cla[n]
-            msg ["unit_of_meas"] = unit_of_meas[n]
-            msg ["val_tpl"]      = "{{ value_json.pytes[" + str(power-1) + "]." + ids[n]+ "}}"
-            msg ["dev"]          = {"identifiers": ["pytes"],"manufacturer": "PYTES","model": "E-Box48100R","name": "pytes_ebox","sw_version": "1.0"}
-            
-            message = json.dumps(msg)
-            publish.single(state_topic, message, hostname=MQTT_broker)
+    try:
+        msg          ={} 
+        config       = 1
+        names        =["pytes_current", "pytes_voltage" , "pytes_temperature", "pytes_soc", "pytes_status"]
+        ids          =["current", "voltage" , "temperature", "soc", "basic_st"] #do not change the prefix "pytes_"
+        dev_cla      =["current", "voltage", "temperature", "battery","None"]
+        unit_of_meas =["A","v","°C", "%",""]
+        
+        for power in range (1, powers+1):
+            for n in range(5):
+                state_topic          ="homeassistant/sensor/pytes/"+str(config)+"/config"
+                msg ["name"]         = names[n]+"_"+str(power)         
+                msg ["stat_t"]       = "homeassistant/sensor/pytes/state"
+                msg ["uniq_id"]      = "pytes_"+ids[n]+"_"+str(power)
+                if dev_cla[n] != "None":
+                    msg ["dev_cla"]  = dev_cla[n]
+                msg ["unit_of_meas"] = unit_of_meas[n]
+                msg ["val_tpl"]      = "{{ value_json.pytes[" + str(power-1) + "]." + ids[n]+ "}}"
+                msg ["dev"]          = {"identifiers": ["pytes"],"manufacturer": "PYTES","model": "E-Box48100R","name": "pytes_ebox","sw_version": "1.0"}
+                
+                message              = json.dumps(msg)
+                publish.single(state_topic, message, hostname=MQTT_broker)
 
-            msg                  ={}
-            config               = config +1
-            b = "...mqtt auto discovery initialization" + "." * config
-            print (b, end="\r")
-            time.sleep(2)
+                msg                  ={}
+                config               = config +1
+                b = "...mqtt auto discovery initialization" + "." * config
+                print (b, end="\r")
+                time.sleep(2)
+        print("...mqtt auto discovery initialization completed")
+        
+    except Exception as e:
+        print('...mqtt_discovery failed' + str(e))     
 
 def mqtt_publish():
-    state_topic = "homeassistant/sensor/pytes/state"
-    message     = json.dumps(json_data)
-    publish.single(state_topic, message, hostname=MQTT_broker)
-    print ('...mqtt publish  : ok')
+    try:
+        state_topic = "homeassistant/sensor/pytes/state"
+        message     = json.dumps(json_data)
+        publish.single(state_topic, message, hostname=MQTT_broker)
+        print ('...mqtt publish  : ok')
+        
+    except Exception as e:
+        print ('...mqtt publish error' + str(e))
 
 # --------------------------serial initialization------------------- 
 try:
@@ -286,6 +295,7 @@ while True:
             errors_no = errors_no + 1
         print ('...errors        :', errors_no, 'loops:' , loops_no, 'efficiency:', round((1-(errors_no/loops_no))*100,2))
         print ('------------------------------------------------------')
+        
         #clear variables
         pwr = []
         errors = 'false'
