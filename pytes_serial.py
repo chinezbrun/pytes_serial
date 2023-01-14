@@ -33,7 +33,7 @@ loops_no              = 0                                   # used to count no o
 errors_no             = 0                                   # used to count no of errors and to calculate % 
 errors = 'false'
 
-print('PytesSerial build: v0.2.2_20221223')
+print('PytesSerial build: v0.2.3_20230114')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -228,7 +228,7 @@ def mqtt_discovery():
                 msg ["dev"]          = {"identifiers": ["pytes"],"manufacturer": "PYTES","model": "E-Box48100R","name": "pytes_ebox","sw_version": "1.0"}
                 
                 message              = json.dumps(msg)
-                publish.single(state_topic, message, hostname=MQTT_broker)
+                publish.single(state_topic, message, hostname=MQTT_broker, qos=0, retain=True)
 
                 msg                  ={}
                 config               = config +1
