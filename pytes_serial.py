@@ -25,6 +25,9 @@ database              = config.get('Maria DB connection', 'database')
 
 MQTT_active           = config.get('MQTT', 'MQTT_active')
 MQTT_broker           = config.get('MQTT', 'MQTT_broker')
+MQTT_port             = int(config.get('MQTT', 'MQTT_port'))
+MQTT_username         = config.get('MQTT', 'MQTT_username')
+MQTT_password         = config.get('MQTT', 'MQTT_password')
 
 start_time            = time.time()
 up_time               = time.time()
@@ -33,7 +36,7 @@ loops_no              = 0                                   # used to count no o
 errors_no             = 0                                   # used to count no of errors and to calculate % 
 errors = 'false'
 
-print('PytesSerial build: v0.2.3_20230114')
+print('PytesSerial build: v0.3.0_20230123')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -45,23 +48,32 @@ def log (str) :
         return
     except Exception as e:
         print("Errorhandling: double error in EventLog", e)
-
+        
 def parsing_serial():
-    global errors
-    if ser.is_open != True:
-       ser.open()
-       time.sleep(0.2) 
-       print ('...serial opened')
-    for power in range (1, powers+1):                                 # do the loop for each battery
-        try:
-            # parsing pwr x commmand - reading power bank x   
-            line_str       = ""                                       # clear line_str
-            line           = ""                                       # clear line            
-            power_bytes    = bytes(str(power), 'ascii')               # convert to bytes
-            ser.write(b'pwr '+ power_bytes + b'\n')                   # write on serial port 'pwr x' command
+    global errors                             
+    volt_st      = None                                                                            #  initiate non critical variable to ensure various firmaware combatibility    
+    current_st   = None   
+    temp_st      = None     
+    coul_st      = None
+    soh_st       = None
+    heater_st    = None
+    bat_events   = None
+    power_events = None
+    sys_events   = None
+    
+    try:
+        if ser.is_open != True:
+           ser.open()
+           print ('...serial opened')
+           
+        for power in range (1, powers+1):                                                          # do the loop for each battery
+            line_str       = ""                                                                    # clear line_str
+            line           = ""                                                                    # clear line            
+            power_bytes    = bytes(str(power), 'ascii')                                            # convert to bytes
+            ser.write(b'pwr '+ power_bytes + b'\n')                                                # write on serial port 'pwr x' command
             ser.flush()                                     
             
-            time.sleep(0.2)                                           # calm down a bit ...
+            time.sleep(0.5)                                                                        # calm down a bit ...
             buffer = ser.in_waiting                                   
             print ('...writing complete ', 'in buffer:', buffer)          
             
@@ -73,12 +85,12 @@ def parsing_serial():
                     print('...suspicious data set, trying again')                    
                     errors = 'true'                                                          
                     
-                    log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line))               # [DPO] for debug purpose remark the line
+                    log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line))                        # [DPO] for debug purpose
                     
                     if ser.is_open == True:
                         ser.close()
                         print ('...serial closed')
-                    return                                                                    # do not move forward if no end of the parsing group detected                       
+                    return                                                                         # do not move forward if no end of the parsing group detected                       
 
                 if line_str[1:18] == 'Voltage         :': voltage      = int(line_str[19:27])/1000
                 if line_str[1:18] == 'Current         :': current      = int(line_str[19:27])/1000
@@ -93,7 +105,7 @@ def parsing_serial():
                 if line_str[1:18] == 'Heater Status   :': heater_st    = line_str[19:27]
                 if line_str[1:18] == 'Bat Events      :': bat_events   = int(line_str[19:27],16)
                 if line_str[1:18] == 'Power Events    :': power_events = int(line_str[19:27],16)
-                if line_str[1:18] == 'System Fault    :': sys_events   = int(line_str[19:27],16)       
+                if line_str[1:18] == 'System Fault    :': sys_events   = int(line_str[19:27],16)
                 if line_str[1:18] == 'Command completed':
                     break
 
@@ -132,28 +144,62 @@ def parsing_serial():
                 'sys_events': sys_events}
                 
             pwr.append(pwr_array)
-
-        except Exception as e:
-            print("...serial parsing error: " + str(e))
-            errors = 'true'
-                    
-            log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line))               # [DPO] for debug purpose remark the line
             
-            if ser.is_open == True:
-                ser.close()
-                print ('...serial closed')
-            return
+        statistics()
         
-    print ('...serial parsing: ok')                
+        print ('...serial parsing: ok')
+        
+    except Exception as e:
+        print("...serial parsing error: " + str(e))
+        errors = 'true'
+        if ser.is_open == True:
+            ser.close()
+            print ('...serial closed')
+        return
+    
+        log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line))                                    # [DPO] for debug purpose
+        
+def statistics():
+    global sys_voltage
+    global sys_current
+    global sys_soc
+    global sys_temp
+    global sys_basic_st
+    sys_voltage  = 0
+    sys_current  = 0
+    sys_soc      = 0
+    sys_temp     = 0
+    sys_basic_st = ""
+
+    for power in range (1, powers+1):
+        sys_voltage       = sys_voltage + pwr[power-1]['voltage']             # vontage will be the average of all batteries
+        sys_current       = round((sys_current + pwr[power-1]['current']),3)  # current will be sum of all banks          
+        sys_soc           = sys_soc + pwr[power-1]['soc']                     # soc will be the average of all batteries
+        sys_temp          = sys_temp + pwr[power-1]['temperature']            # temperature will be the average of all batteries
+   
+    sys_voltage  = round((sys_voltage / powers), 3)    
+    sys_soc      = int(sys_soc / powers)   
+    sys_basic_st = pwr[0]['basic_st']                                         # status will be the master status
+    sys_temp     = round((sys_temp / powers), 1)
 
 def json_serialize():
     global errors
     global json_data
     try:
-        json_data={'relay_local_time':TimeStamp, 'serial_uptime':uptime, 'pytes':pwr}
+        json_data={'relay_local_time':TimeStamp,
+                   'serial_uptime':uptime,
+                   'powers' : powers,
+                   'voltage': sys_voltage,
+                   'current': sys_current,
+                   'temperature': sys_temp,
+                   'soc': sys_soc,
+                   'basic_st': sys_basic_st,
+                   'pytes':pwr}
+        
         with open(output_path + 'pytes_status.json', 'w') as outfile:
             json.dump(json_data, outfile)
-        print('...json creation:  ok')    
+        print('...json creation:  ok')
+        
     except Exception as e:
         print('...json serailization error: ' + str(e))
         errors = 'true'
@@ -208,6 +254,9 @@ def maria_db():
 
 def mqtt_discovery():
     try:
+        MQTT_auth = None
+        if len(MQTT_username) >0:
+            MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
         msg          ={} 
         config       = 1
         names        =["pytes_current", "pytes_voltage" , "pytes_temperature", "pytes_soc", "pytes_status"]
@@ -215,6 +264,29 @@ def mqtt_discovery():
         dev_cla      =["current", "voltage", "temperature", "battery","None"]
         unit_of_meas =["A","v","°C", "%",""]
         
+        # define system sensors 
+        for n in range(5):
+            state_topic          ="homeassistant/sensor/pytes/"+str(config)+"/config"
+            msg ["name"]         = names[n]      
+            msg ["stat_t"]       = "homeassistant/sensor/pytes/state"
+            msg ["uniq_id"]      = "pytes_"+ids[n]
+            if dev_cla[n] != "None":
+                msg ["dev_cla"]  = dev_cla[n]
+            msg ["unit_of_meas"] = unit_of_meas[n]
+            msg ["val_tpl"]      = "{{ value_json." + ids[n]+ "}}"
+            msg ["dev"]          = {"identifiers": ["pytes"],"manufacturer": "PYTES","model": "E-Box48100R","name": "pytes_ebox","sw_version": "1.0"}
+            
+            message              = json.dumps(msg)
+            publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
+
+            b = "...mqtt auto discovery initialization :" + str(round(config/(5*powers+5)*100)) +" %"
+            print (b, end="\r")
+            
+            msg                  ={}
+            config               = config +1
+            time.sleep(2)
+        
+        # define individual batteries sensors
         for power in range (1, powers+1):
             for n in range(5):
                 state_topic          ="homeassistant/sensor/pytes/"+str(config)+"/config"
@@ -228,13 +300,15 @@ def mqtt_discovery():
                 msg ["dev"]          = {"identifiers": ["pytes"],"manufacturer": "PYTES","model": "E-Box48100R","name": "pytes_ebox","sw_version": "1.0"}
                 
                 message              = json.dumps(msg)
-                publish.single(state_topic, message, hostname=MQTT_broker, qos=0, retain=True)
+                publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
+                b = "...mqtt auto discovery initialization :" + str(round(config/(5*powers+5)*100)) +" %"
+                print (b, end="\r")
+                
                 msg                  ={}
                 config               = config +1
-                b = "...mqtt auto discovery initialization" + "." * config
-                print (b, end="\r")
                 time.sleep(2)
+                
         print("...mqtt auto discovery initialization completed")
         
     except Exception as e:
@@ -242,9 +316,12 @@ def mqtt_discovery():
 
 def mqtt_publish():
     try:
+        MQTT_auth = None
+        if len(MQTT_username) >0:
+            MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
         state_topic = "homeassistant/sensor/pytes/state"
         message     = json.dumps(json_data)
-        publish.single(state_topic, message, hostname=MQTT_broker)
+        publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
         print ('...mqtt publish  : ok')
         
     except Exception as e:
