@@ -36,7 +36,7 @@ loops_no              = 0                                   # used to count no o
 errors_no             = 0                                   # used to count no of errors and to calculate % 
 errors = 'false'
 
-print('PytesSerial build: v0.3.0_20230123')
+print('PytesSerial build: v0.3.1_20230125')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -50,115 +50,137 @@ def log (str) :
         print("Errorhandling: double error in EventLog", e)
         
 def parsing_serial():
-    global errors                             
-    volt_st      = None                                                                            #  initiate non critical variable to ensure various firmaware combatibility    
-    current_st   = None   
-    temp_st      = None     
-    coul_st      = None
-    soh_st       = None
-    heater_st    = None
-    bat_events   = None
-    power_events = None
-    sys_events   = None
-    
     try:
+        global errors
+        global trials
+        volt_st      = None                                                                        #  initiate non critical variable to ensure various firmaware combatibility    
+        current_st   = None   
+        temp_st      = None     
+        coul_st      = None
+        soh_st       = None
+        heater_st    = None
+        bat_events   = None
+        power_events = None
+        sys_events   = None
+
+        data_set = 0
         if ser.is_open != True:
            ser.open()
            print ('...serial opened')
            
-        for power in range (1, powers+1):                                                          # do the loop for each battery
+        for power in range (1, powers+1):
             line_str       = ""                                                                    # clear line_str
             line           = ""                                                                    # clear line            
             power_bytes    = bytes(str(power), 'ascii')                                            # convert to bytes
-            ser.write(b'pwr '+ power_bytes + b'\n')                                                # write on serial port 'pwr x' command
-            ser.flush()                                     
+            ser.write(b'pwr '+ power_bytes + b'\n')                                                # write on serial port 'pwr x' command            ser.flush()
+            ser.flush()
             
             time.sleep(0.5)                                                                        # calm down a bit ...
-            buffer = ser.in_waiting                                   
-            print ('...writing complete ', 'in buffer:', buffer)          
-            
+            print ('...writing complete, in buffer:', ser.in_waiting )          
+      
+            decode = 'false'
             while True:
-                if ser.in_waiting > 0:
-                    line     = ser.readline()
-                    line_str = line.decode("Ascii")
-                else:
-                    print('...suspicious data set, trying again')                    
-                    errors = 'true'                                                          
-                    
-                    log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line))                        # [DPO] for debug purpose
-                    
-                    if ser.is_open == True:
-                        ser.close()
-                        print ('...serial closed')
-                    return                                                                         # do not move forward if no end of the parsing group detected                       
+                line = ser.read()
+                if line:
+                    #print(line.decode("Ascii"))
+                    #print(line)
+                    if ser.in_waiting == 0:
+                        break
+                    if line != b'\n':
+                        line_str = line_str + line.decode("Ascii")
+                    else:
+                        #print (line_str)
+                        if line_str[1:6].startswith('Power'):
+                            decode ='true'
+                            
+                        if decode =='true':
+                            if line_str[1:18] == 'Voltage         :': voltage      = int(line_str[19:27])/1000
+                            if line_str[1:18] == 'Current         :': current      = int(line_str[19:27])/1000
+                            if line_str[1:18] == 'Temperature     :': temp         = int(line_str[19:27])/1000
+                            if line_str[1:18] == 'Coulomb         :': soc          = int(line_str[19:27])
+                            if line_str[1:18] == 'Basic Status    :': basic_st     = line_str[19:27]        
+                            if line_str[1:18] == 'Volt Status     :': volt_st      = line_str[19:27]      
+                            if line_str[1:18] == 'Current Status  :': current_st   = line_str[19:27]    
+                            if line_str[1:18] == 'Tmpr. Status    :': temp_st      = line_str[19:27]     
+                            if line_str[1:18] == 'Coul. Status    :': coul_st      = line_str[19:27]
+                            if line_str[1:18] == 'Soh. Status     :': soh_st       = line_str[19:27]
+                            if line_str[1:18] == 'Heater Status   :': heater_st    = line_str[19:27]
+                            if line_str[1:18] == 'Bat Events      :': bat_events   = int(line_str[19:27],16)
+                            if line_str[1:18] == 'Power Events    :': power_events = int(line_str[19:27],16)
+                            if line_str[1:18] == 'System Fault    :': sys_events   = int(line_str[19:27],16)
+                            
+                            if line_str[1:18] == 'Command completed':
+                                decode ='false' 
+                                print ('power           :', power)
+                                print ('voltage         :', voltage)    
+                                print ('current         :', current)
+                                print ('temperature     :', temp)
+                                print ('soc [%]         :', soc)
+                                print ('basic_st        :', basic_st)         
+                                print ('volt_st         :', volt_st)      
+                                print ('current_st      :', current_st)     
+                                print ('temp_st         :', temp_st)     
+                                print ('coul_st         :', coul_st)
+                                print ('soh_st          :', soh_st)
+                                print ('heater_st       :', heater_st)
+                                print ('bat_events      :', bat_events)
+                                print ('power_events    :', power_events)
+                                print ('sys_fault       :', sys_events)              
+                                print ('---------------------------')
+                                
+                                pwr_array = {
+                                            'power': power,
+                                            'voltage': voltage,
+                                            'current': current,
+                                            'temperature': temp,
+                                            'soc': soc,
+                                            'basic_st': basic_st,
+                                            'volt_st': volt_st,
+                                            'current_st': current_st,
+                                            'temp_st':temp_st,
+                                            'soh_st':soh_st,
+                                            'coul_st': coul_st,
+                                            'heater_st': heater_st,
+                                            'bat_events': bat_events,
+                                            'power_events': power_events,
+                                            'sys_events': sys_events}
 
-                if line_str[1:18] == 'Voltage         :': voltage      = int(line_str[19:27])/1000
-                if line_str[1:18] == 'Current         :': current      = int(line_str[19:27])/1000
-                if line_str[1:18] == 'Temperature     :': temp         = int(line_str[19:27])/1000
-                if line_str[1:18] == 'Coulomb         :': soc          = int(line_str[19:27])
-                if line_str[1:18] == 'Basic Status    :': basic_st     = line_str[19:27]        
-                if line_str[1:18] == 'Volt Status     :': volt_st      = line_str[19:27]      
-                if line_str[1:18] == 'Current Status  :': current_st   = line_str[19:27]    
-                if line_str[1:18] == 'Tmpr. Status    :': temp_st      = line_str[19:27]     
-                if line_str[1:18] == 'Coul. Status    :': coul_st      = line_str[19:27]
-                if line_str[1:18] == 'Soh. Status     :': soh_st       = line_str[19:27]
-                if line_str[1:18] == 'Heater Status   :': heater_st    = line_str[19:27]
-                if line_str[1:18] == 'Bat Events      :': bat_events   = int(line_str[19:27],16)
-                if line_str[1:18] == 'Power Events    :': power_events = int(line_str[19:27],16)
-                if line_str[1:18] == 'System Fault    :': sys_events   = int(line_str[19:27],16)
-                if line_str[1:18] == 'Command completed':
-                    break
-
-            print ('power           :', power)
-            print ('voltage         :', voltage)    
-            print ('current         :', current)
-            print ('temperature     :', temp)
-            print ('soc [%]         :', soc)
-            print ('basic_st        :', basic_st)         
-            print ('volt_st         :', volt_st)      
-            print ('current_st      :', current_st)     
-            print ('temp_st         :', temp_st)     
-            print ('coul_st         :', coul_st)
-            print ('soh_st          :', soh_st)
-            print ('heater_st       :', heater_st)
-            print ('bat_events      :', bat_events)
-            print ('power_events    :', power_events)
-            print ('sys_fault       :', sys_events)              
-            print ('---------------------------')
-            
-            pwr_array = {
-                'power': power,
-                'voltage': voltage,
-                'current': current,
-                'temperature': temp,
-                'soc': soc,
-                'basic_st': basic_st,
-                'volt_st': volt_st,
-                'current_st': current_st,
-                'temp_st':temp_st,
-                'soh_st':soh_st,
-                'coul_st': coul_st,
-                'heater_st': heater_st,
-                'bat_events': bat_events,
-                'power_events': power_events,
-                'sys_events': sys_events}
-                
-            pwr.append(pwr_array)
-            
-        statistics()
+                                pwr.append(pwr_array)
+                                
+                                data_set=data_set+1
+                                
+                        line_str = ""
         
-        print ('...serial parsing: ok')
-        
+        if data_set == powers:
+            statistics()
+            errors='false'
+            trials=0
+            print ('...serial parsing: ok')
+        else:
+            errors='true'
+            if trials < 6:
+                print ('...nothing found, trying again')
+                trials = trials+1
+                time.sleep(1)
+                parsing_serial()
+            else:
+                if ser.is_open == True:
+                    ser.close()
+                    print ('...not solved, serial closed')
+                    log('*'+str(errors_no)+'*'+'data set incomplete**>'+str(line))                 # [DPO] for debug purpose                    
+                    return
+                    
     except Exception as e:
         print("...serial parsing error: " + str(e))
         errors = 'true'
         if ser.is_open == True:
             ser.close()
             print ('...serial closed')
+            
+        log('*'+str(errors_no)+'*'+'Except:'+str(e)+'**>'+str(line))                               # [DPO] for debug purpose
+    
         return
     
-        log('*'+str(errors_no)+'*'+str(buffer)+'**>'+str(line))                                    # [DPO] for debug purpose
-        
 def statistics():
     global sys_voltage
     global sys_current
@@ -172,7 +194,7 @@ def statistics():
     sys_basic_st = ""
 
     for power in range (1, powers+1):
-        sys_voltage       = sys_voltage + pwr[power-1]['voltage']             # vontage will be the average of all batteries
+        sys_voltage       = sys_voltage + pwr[power-1]['voltage']             # voltage will be the average of all batteries
         sys_current       = round((sys_current + pwr[power-1]['current']),3)  # current will be sum of all banks          
         sys_soc           = sys_soc + pwr[power-1]['soc']                     # soc will be the average of all batteries
         sys_temp          = sys_temp + pwr[power-1]['temperature']            # temperature will be the average of all batteries
@@ -376,3 +398,4 @@ while True:
         #clear variables
         pwr = []
         errors = 'false'
+        trials = 0        
