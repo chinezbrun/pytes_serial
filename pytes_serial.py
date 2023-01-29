@@ -36,7 +36,7 @@ loops_no              = 0                                   # used to count no o
 errors_no             = 0                                   # used to count no of errors and to calculate % 
 errors = 'false'
 
-print('PytesSerial build: v0.3.2_20230129')
+print('PytesSerial build: v0.3.3_20230130')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -83,7 +83,10 @@ def parsing_serial():
       
             decode = 'false'
             while True:
-                line = ser.read()
+                if ser.in_waiting > 0:
+                    line = ser.read()
+                else:
+                    break
                 if line:
                     #print(line.decode("Ascii"))
                     #print(line)
