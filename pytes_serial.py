@@ -36,7 +36,7 @@ loops_no              = 0                                   # used to count no o
 errors_no             = 0                                   # used to count no of errors and to calculate % 
 errors = 'false'
 
-print('PytesSerial build: v0.3.1_20230125')
+print('PytesSerial build: v0.3.2_20230129')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -53,6 +53,7 @@ def parsing_serial():
     try:
         global errors
         global trials
+        global pwr                                                                                 
         volt_st      = None                                                                        #  initiate non critical variable to ensure various firmaware combatibility    
         current_st   = None   
         temp_st      = None     
@@ -64,6 +65,8 @@ def parsing_serial():
         sys_events   = None
 
         data_set = 0
+        pwr      = []
+        
         if ser.is_open != True:
            ser.open()
            print ('...serial opened')
@@ -147,8 +150,8 @@ def parsing_serial():
 
                                 pwr.append(pwr_array)
                                 
-                                data_set=data_set+1
-                                
+                                data_set = data_set +1
+
                         line_str = ""
         
         if data_set == powers:
@@ -159,15 +162,16 @@ def parsing_serial():
         else:
             errors='true'
             if trials < 6:
-                print ('...nothing found, trying again')
+                print ('...incomplete data set, trying again')
                 trials = trials+1
+                #log('*'+str(errors_no)+'*trials: '+str(trials)+'**>'+str(line))                   # [DPO] for debug purpose                 
                 time.sleep(1)
                 parsing_serial()
             else:
                 if ser.is_open == True:
                     ser.close()
                     print ('...not solved, serial closed')
-                    log('*'+str(errors_no)+'*'+'data set incomplete**>'+str(line))                 # [DPO] for debug purpose                    
+                    log('*'+str(errors_no)+'*'+'incomplete data set*>'+str(line))                 # [DPO] for debug purpose                    
                     return
                     
     except Exception as e:
@@ -180,7 +184,7 @@ def parsing_serial():
         log('*'+str(errors_no)+'*'+'Except:'+str(e)+'**>'+str(line))                               # [DPO] for debug purpose
     
         return
-    
+
 def statistics():
     global sys_voltage
     global sys_current
