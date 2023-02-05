@@ -36,7 +36,7 @@ loops_no              = 0                                   # used to count no o
 errors_no             = 0                                   # used to count no of errors and to calculate % 
 errors = 'false'
 
-print('PytesSerial build: v0.3.3_20230130')
+print('PytesSerial build: v0.3.4_20230205')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -100,9 +100,9 @@ def parsing_serial():
                             decode ='true'
                             
                         if decode =='true':
-                            if line_str[1:18] == 'Voltage         :': voltage      = int(line_str[19:27])/1000
-                            if line_str[1:18] == 'Current         :': current      = int(line_str[19:27])/1000
-                            if line_str[1:18] == 'Temperature     :': temp         = int(line_str[19:27])/1000
+                            if line_str[1:18] == 'Voltage         :': voltage      = round(int(line_str[19:27])/1000, 2)
+                            if line_str[1:18] == 'Current         :': current      = round(int(line_str[19:27])/1000, 2)
+                            if line_str[1:18] == 'Temperature     :': temp         = round(int(line_str[19:27])/1000, 1)
                             if line_str[1:18] == 'Coulomb         :': soc          = int(line_str[19:27])
                             if line_str[1:18] == 'Basic Status    :': basic_st     = line_str[19:27]        
                             if line_str[1:18] == 'Volt Status     :': volt_st      = line_str[19:27]      
@@ -202,15 +202,15 @@ def statistics():
 
     for power in range (1, powers+1):
         sys_voltage       = sys_voltage + pwr[power-1]['voltage']             # voltage will be the average of all batteries
-        sys_current       = round((sys_current + pwr[power-1]['current']),3)  # current will be sum of all banks          
+        sys_current       = round((sys_current + pwr[power-1]['current']),2)  # current will be sum of all banks          
         sys_soc           = sys_soc + pwr[power-1]['soc']                     # soc will be the average of all batteries
         sys_temp          = sys_temp + pwr[power-1]['temperature']            # temperature will be the average of all batteries
    
-    sys_voltage  = round((sys_voltage / powers), 3)    
+    sys_voltage  = round((sys_voltage / powers), 2)    
     sys_soc      = int(sys_soc / powers)   
     sys_basic_st = pwr[0]['basic_st']                                         # status will be the master status
     sys_temp     = round((sys_temp / powers), 1)
-
+    
 def json_serialize():
     global errors
     global json_data
@@ -291,7 +291,7 @@ def mqtt_discovery():
         names        =["pytes_current", "pytes_voltage" , "pytes_temperature", "pytes_soc", "pytes_status"]
         ids          =["current", "voltage" , "temperature", "soc", "basic_st"] #do not change the prefix "pytes_"
         dev_cla      =["current", "voltage", "temperature", "battery","None"]
-        unit_of_meas =["A","v","°C", "%",""]
+        unit_of_meas =["A","V","°C", "%",""]
         
         # define system sensors 
         for n in range(5):
