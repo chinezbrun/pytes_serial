@@ -1,0 +1,27 @@
+### Follow below steps to scheduled reboot of the RPI every midnight and autostart of the script @reboot 
+
+## Autostart raspberry documentation here: https://www.wikihow.com/Execute-a-Script-at-Startup-on-the-Raspberry-Pi
+## Crontab documentaion here: http://man7.org/linux/man-pages/man5/crontab.5.html
+## Crontab generator here: https://crontab-generator.org/ 
+## Crontab explanation here: https://crontab.guru/tips.html 
+
+# open cron (use nano as editor):
+sudo crontab -e
+# go to the end of the file and write the crontab task to schedule the midnight reboot:
+
+0 0 * * * /sbin/shutdown -r now
+
+# save the file with ctrl+O and enter then exit with ctrl+X
+
+# open autostart file in raspberry:
+
+sudo nano /etc/xdg/lxsession/LXDE-pi/autostart
+
+# go with cursor below the @pcmanfm --desktop --profile LXDE-pi line 
+# now write the autostart line make sure that sh file is saved in directory and all absolute paths are correct:
+
+@lxterminal -e /home/pi/Documents/pytes/pytes_serial.sh
+
+# save the file with ctrl+O and enter then exit with ctrl+X
+# REBOOT the raspberry for testare
+# enjoy
