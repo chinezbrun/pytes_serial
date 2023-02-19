@@ -31,7 +31,8 @@ Serial cable must be connected to battery 1 (master).
 3. configure pyteys_serial.cfg as per your needs (do not remark or delete lines in sections just do the configuration)
 4. make sure that all required pyton modules are installed see [requirements](/REQUIREMENTS.md)
 5. go to the folder where the program is located (i.e cd /home/pi/Documents/pytes)
-6. execute pytes_serial.sh to have a separate terminal instance (works for Linux/Raspberry) or python3 pytes_serial.py directly from console
+6. execute pytes_serial.sh to have a separate terminal instance (works for Linux/Raspberry) or python3 pytes_serial.py directly from console.
+   if you need setup an autostart of the program on reboot more info [here] (/example/setup_autostart) 
 
 enjoy
 
