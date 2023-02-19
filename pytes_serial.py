@@ -36,7 +36,7 @@ loops_no              = 0                                   # used to count no o
 errors_no             = 0                                   # used to count no of errors and to calculate % 
 errors = 'false'
 
-print('PytesSerial build: v0.3.4_20230205')
+print('PytesSerial build: v0.3.5_20230219')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -167,14 +167,13 @@ def parsing_serial():
             if trials < 6:
                 print ('...incomplete data set, trying again')
                 trials = trials+1
-                #log('*'+str(errors_no)+'*trials: '+str(trials)+'**>'+str(line))                   # [DPO] for debug purpose                 
                 time.sleep(1)
                 parsing_serial()
             else:
                 if ser.is_open == True:
                     ser.close()
                     print ('...not solved, serial closed')
-                    log('*'+str(errors_no)+'*'+'incomplete data set*>'+str(line))                 # [DPO] for debug purpose                    
+                    log('*'+str(errors_no)+'*'+'Info -- incomplete data set*>'+str(line))                 # [DPO] for debug purpose                    
                     return
                     
     except Exception as e:
@@ -184,7 +183,7 @@ def parsing_serial():
             ser.close()
             print ('...serial closed')
             
-        log('*'+str(errors_no)+'*'+'Except:'+str(e)+'**>'+str(line))                               # [DPO] for debug purpose
+        log('*'+str(errors_no)+'*'+'Except -- parsing_serial:'+str(e)+'**>'+str(line))                               # [DPO] for debug purpose
     
         return
 
@@ -363,11 +362,14 @@ try:
           parity=serial.PARITY_NONE,\
           stopbits=serial.STOPBITS_ONE,\
           bytesize=serial.EIGHTBITS,\
-          timeout=0)
+          timeout=10)
     print('...connected to: ' + ser.portstr)
-
+    
 except Exception as e:
     print('...serial connection error ' + str(e))
+    log('*'+str(errors_no)+'*'+'Except -- open serial port:'+str(e))  
+    print('...program initialisation failed -- exit')
+    exit()
     
 # --------------------------mqtt auto discovery (HA)----------------
 if MQTT_active =='true':  mqtt_discovery()
