@@ -33,8 +33,9 @@ start_time            = time.time()
 up_time               = time.time()
 pwr                   = []                                  # used to serialise JSON data
 loops_no              = 0                                   # used to count no of loops and to calculate % of errors
-errors_no             = 0                                   # used to count no of errors and to calculate % 
-errors = 'false'
+errors_no             = 0                                   # used to count no of errors and to calculate %
+trials                = 0                                   # used to improve data reading accuracy -- def parsing_serial
+errors                = 'false'
 
 print('PytesSerial build: v0.3.5_20230219')
 
