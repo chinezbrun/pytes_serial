@@ -202,11 +202,11 @@ def statistics():
 
     for power in range (1, powers+1):
         sys_voltage       = sys_voltage + pwr[power-1]['voltage']             # voltage will be the average of all batteries
-        sys_current       = round((sys_current + pwr[power-1]['current']),2)  # current will be sum of all banks          
+        sys_current       = round((sys_current + pwr[power-1]['current']),1)  # current will be sum of all banks          
         sys_soc           = sys_soc + pwr[power-1]['soc']                     # soc will be the average of all batteries
         sys_temp          = sys_temp + pwr[power-1]['temperature']            # temperature will be the average of all batteries
    
-    sys_voltage  = round((sys_voltage / powers), 2)    
+    sys_voltage  = round((sys_voltage / powers), 1)    
     sys_soc      = int(sys_soc / powers)   
     sys_basic_st = pwr[0]['basic_st']                                         # status will be the master status
     sys_temp     = round((sys_temp / powers), 1)
