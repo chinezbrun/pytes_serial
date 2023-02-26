@@ -37,7 +37,7 @@ errors_no             = 0                                   # used to count no o
 trials                = 0                                   # used to improve data reading accuracy -- def parsing_serial
 errors                = 'false'
 
-print('PytesSerial build: v0.3.5_20230219')
+print('PytesSerial build: v0.3.5_20230226')
 
 # ------------------------functions area----------------------------
 def log (str) :
@@ -291,7 +291,8 @@ def mqtt_discovery():
         names        =["pytes_current", "pytes_voltage" , "pytes_temperature", "pytes_soc", "pytes_status"]
         ids          =["current", "voltage" , "temperature", "soc", "basic_st"] #do not change the prefix "pytes_"
         dev_cla      =["current", "voltage", "temperature", "battery","None"]
-        unit_of_meas =["A","V","°C", "%",""]
+        stat_cla     =["measurement","measurement","measurement","measurement","None"]
+        unit_of_meas =["A","V","°C", "%","None"]
         
         # define system sensors 
         for n in range(5):
@@ -301,7 +302,10 @@ def mqtt_discovery():
             msg ["uniq_id"]      = "pytes_"+ids[n]
             if dev_cla[n] != "None":
                 msg ["dev_cla"]  = dev_cla[n]
-            msg ["unit_of_meas"] = unit_of_meas[n]
+            if stat_cla[n] != "None":
+                msg ["stat_cla"]  = stat_cla[n]
+            if unit_of_meas[n] != "None":
+                msg ["unit_of_meas"] = unit_of_meas[n]
             msg ["val_tpl"]      = "{{ value_json." + ids[n]+ "}}"
             msg ["dev"]          = {"identifiers": ["pytes"],"manufacturer": "PYTES","model": "E-Box48100R","name": "pytes_ebox","sw_version": "1.0"}
             
@@ -324,7 +328,10 @@ def mqtt_discovery():
                 msg ["uniq_id"]      = "pytes_"+ids[n]+"_"+str(power)
                 if dev_cla[n] != "None":
                     msg ["dev_cla"]  = dev_cla[n]
-                msg ["unit_of_meas"] = unit_of_meas[n]
+                if stat_cla[n] != "None":
+                    msg ["stat_cla"]  = stat_cla[n]                    
+                if unit_of_meas[n] != "None":
+                    msg ["unit_of_meas"] = unit_of_meas[n]
                 msg ["val_tpl"]      = "{{ value_json.pytes[" + str(power-1) + "]." + ids[n]+ "}}"
                 msg ["dev"]          = {"identifiers": ["pytes"],"manufacturer": "PYTES","model": "E-Box48100R","name": "pytes_ebox","sw_version": "1.0"}
                 
@@ -341,7 +348,7 @@ def mqtt_discovery():
         print("...mqtt auto discovery initialization completed")
         
     except Exception as e:
-        print('...mqtt_discovery failed' + str(e))     
+        print('...mqtt_discovery failed' + str(e))    
 
 def mqtt_publish():
     try:
