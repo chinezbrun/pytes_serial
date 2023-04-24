@@ -40,7 +40,7 @@ errors                = 'false'
 line_str_array        = []                                  # used to get line strings from serial
 debug                 = 'false'                              # used for debuging purpose
 
-version='PytesSerial build: v0.4.0_20230418'
+version = 'PytesSerial build: v0.4.0_20230424'
 print(version)
 
 # ------------------------functions area----------------------------
@@ -56,30 +56,32 @@ def log (str) :
 
 def serial_write(req, size):
     try:
+        loop_time = time.time()
+        
         if ser.is_open != True:
             ser.open()
             print ('...serial opened')
-
-        n = 0 
-        while n<5 :
-            ser.flushOutput()
-            ser.flushInput()
-            bytes_req = bytes(str(req), 'ascii')
-            ser.write(bytes_req + b'\n')
-            ser.flush()
-            time.sleep(0.5)
-            
-            n = n + 1
+            log('Info  : serial write   - serial opened request: ' + str(req) + ' in buffer: ' + str(ser.in_waiting))
+           
+        bytes_req = bytes(str(req), 'ascii')
+        ser.write(bytes_req) 
+        time.sleep(0.3)    
+        ser.write(b'\n')
+        time.sleep(0.1)
+        
+        while True:
             if ser.in_waiting > size:
-                print ('...writing complete, in buffer:', ser.in_waiting )
+                print ('...writing complete, in buffer: ', ser.in_waiting , round((time.time() - loop_time),2))
                 return "true"
             
-            else:
-                if debug == 'true': log('Debug: serial write, request:' + str(req) + ' package in buffer ' + str(ser.in_waiting) + ' < ' + str(size) + '- write again #' + str(n))
-                time.sleep(0.5)
+            elif (time.time() - loop_time) > 2:
+                if debug == 'true':
+                    log('Debug : serial write   - timeout: ' + str(round((time.time() - loop_time),2)) + ' request:' + str(req) + ' in buffer: ' + str(ser.in_waiting) + ' < ' + str(size))
+                return "false"
             
-        return "false"
-        
+            else:
+                time.sleep(0.05)
+
     except Exception as e:
         print('...serial write error: '+str(e))
         log('Except: serial write error: '+str(e))
@@ -95,7 +97,7 @@ def serial_read():
             
         while True:
             if ser.in_waiting > 0:
-                line          = ser.read(1)
+                line          = ser.read()
                 line_str      = line_str + line.decode("Ascii")
                 
                 if line == b'\n':
@@ -134,9 +136,10 @@ def parsing_serial():
             
             req           = ('pwr '+ str(power))
             size = 800
+            
             serial_write(req,size)
             serial_read()
-            
+
             decode         = 'false'
             
             for line_str in line_str_array:
@@ -218,8 +221,8 @@ def parsing_serial():
                     ser.close()
 
                 print ('...incomplete data sets, close serial, trying again')
-                log('Info  : parsing serial - incomplete data sets - close serial, trying again #'+str(trials) + ' err_no:'+str(errors_no))
-                if debug == 'true': log('Debug : parsing serial - incomplete data sets - line_str_array: ' + str(line_str_array))
+                log('Info  : parsing serial - incomplete data sets - close serial, trial #'+str(trials) + ' err_no:'+str(errors_no))
+                if debug == 'true': log('Debug : parsing serial - incomplete data sets power: ' + str(power) + ' data set: ' + str(data_set) + ' line_str_array: ' + str(line_str_array))
                 parsing_serial()
 
             else:
@@ -266,19 +269,27 @@ def statistics():
     sys_basic_st = pwr[0]['basic_st']                                         # status will be the master status
     sys_temp     = round((sys_temp / powers), 1)
     
-def json_serialize():
+ def json_serialize():
+    global parsing_time
+    global loops_no
+    global errors_no
     global errors
     global json_data
     try:
-        json_data={'relay_local_time':TimeStamp,
-                   'serial_uptime':uptime,
+        json_data={'relay_local_time':TimeStamp,                   
                    'powers' : powers,
                    'voltage': sys_voltage,
                    'current': sys_current,
                    'temperature': sys_temp,
                    'soc': sys_soc,
                    'basic_st': sys_basic_st,
-                   'pytes':pwr}
+                   'pytes':pwr,
+                   'serial_stat': {'uptime':uptime,
+                                   'loops':loops_no,
+                                   'errors': errors_no,
+                                   'efficiency' :round((1-(errors_no/loops_no))*100,2),
+                                   'ser_round_trip':round(parsing_time,2)}
+                   }
         
         with open(output_path + 'pytes_status.json', 'w') as outfile:
             json.dump(json_data, outfile)
@@ -288,7 +299,7 @@ def json_serialize():
         print('...json serialization error: ' + str(e))
         log('Except: json serialization error: '+str(e))
         errors = 'true'
-
+        
 def maria_db():
     try:
         mydb = mariadb.connect(host=host,port=db_port,user=user,password=password,database=database)
@@ -433,7 +444,7 @@ try:
     
 except Exception as e:
     print('...serial connection error ' + str(e))
-    log('Except: open serial error: '+str(e))  
+    log('Except: open serial error: ' + str(e))  
     print('...program initialisation failed -- exit')
     exit()
     
@@ -453,12 +464,14 @@ while True:
         TimeStamp      = now.strftime("%Y-%m-%d %H:%M:%S")       
         print ('relay local time:', TimeStamp)
         
-        start_time            = time.time() 
         uptime = round((time.time()- up_time)/86400,3)
         print ('serial uptime   :', uptime)
-
+        start_time = time.time()
+        
         if errors == 'false':
+            parsing_time = time.time()
             parsing_serial()
+            parsing_time = time.time() - parsing_time
         if errors == 'false':
             json_serialize()
         if errors == 'false' and SQL_active == 'true':
@@ -468,10 +481,11 @@ while True:
             
         if errors != 'false' :
             errors_no = errors_no + 1
-        print ('...errors        :', errors_no, 'loops:' , loops_no, 'efficiency:', round((1-(errors_no/loops_no))*100,2))
+        print ('...serial stat   :', 'loops:' , loops_no, 'errors:', errors_no, 'efficiency:', round((1-(errors_no/loops_no))*100,2))
+        print ('...serial stat   :', 'parsing round-trip:' , round(parsing_time, 2)) 
         print ('------------------------------------------------------')
         
         #clear variables
         pwr        = []
         errors     = 'false'
-        trials     = 0   
+        trials     = 0
