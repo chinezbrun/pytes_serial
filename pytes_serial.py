@@ -40,7 +40,7 @@ errors                = 'false'
 line_str_array        = []                                  # used to get line strings from serial
 debug                 = 'false'                              # used for debuging purpose
 
-version = 'PytesSerial build: v0.4.0_20230424'
+version = 'PytesSerial build: v0.4.0_20230517'
 print(version)
 
 # ------------------------functions area----------------------------
@@ -49,42 +49,43 @@ def log (str) :
         with open('event.log','a') as file:
             file.write(time.strftime("%d/%m/%Y %H:%M:%S "))
             file.write(str + "\r\n")
+            
         file.close()
         return
+    
     except Exception as e:
-        print('...log error - double error in EventLog', e)
-
+        print('...log error - double error in EventLog: ', e)
+        
 def serial_write(req, size):
     try:
         loop_time = time.time()
         
         if ser.is_open != True:
             ser.open()
-            print ('...serial opened')
-            log('Info  : serial write   - serial opened request: ' + str(req) + ' in buffer: ' + str(ser.in_waiting))
-           
-        bytes_req = bytes(str(req), 'ascii')
-        ser.write(bytes_req) 
-        time.sleep(0.3)    
-        ser.write(b'\n')
+            time.sleep(0.5)
+            print ('...open serial')
+            
+        ser.reset_input_buffer()
+        ser.reset_output_buffer()
+        bytes_req = bytes(str(req), 'utf-8')
+        ser.write(bytes_req + b'\n')
+        ser.flush()
         time.sleep(0.1)
         
         while True:
-            if ser.in_waiting > size:
-                print ('...writing complete, in buffer: ', ser.in_waiting , round((time.time() - loop_time),2))
-                return "true"
-            
-            elif (time.time() - loop_time) > 2:
-                if debug == 'true':
-                    log('Debug : serial write   - timeout: ' + str(round((time.time() - loop_time),2)) + ' request:' + str(req) + ' in buffer: ' + str(ser.in_waiting) + ' < ' + str(size))
+            if (time.time() - loop_time) > 1:
                 return "false"
             
-            else:
-                time.sleep(0.05)
+            elif ser.in_waiting > size:
+                print ('...writing complete, in buffer: ', ser.in_waiting , round((time.time() - loop_time),2))                
+                return "true"
 
+            else:
+                time.sleep(0.05)            
+ 
     except Exception as e:
-        print('...serial write error: '+str(e))
-        log('Except: serial write error: '+str(e))
+        print('...serial write error: '+ str(e))
+        log('Error : serial write - error:'+ str(e))
         
 def serial_read():
     try:
@@ -94,25 +95,27 @@ def serial_read():
         
         if ser.is_open != True:
             ser.open()
+            time.sleep(0.5)
+            print ('...open serial')
             
         while True:
             if ser.in_waiting > 0:
                 line          = ser.read()
-                line_str      = line_str + line.decode("Ascii")
+                line_str      = line_str + line.decode('utf-8')
                 
                 if line == b'\n':
                     line_str_array.append(line_str)
                     line_str = ""
-                   
+                    
             else:
                  break
                 
         return line_str_array
     
     except Exception as e:
-        print('...serial read error: '+str(e))
-        log('Except: serial read error: '+str(e))
-        
+        print('...serial read error: ' + str(e))
+        log('Error : serial read - error:' + str(e))
+                
 def parsing_serial():
     try:
         global line_str_array
@@ -129,21 +132,54 @@ def parsing_serial():
         power_events = None
         sys_events   = None
 
-        data_set     = 0
-        pwr          = []
+        data_set           = 0
+        pwr                = []
+        line_str_array_bak = []
         
-        for power in range (1, powers+1):
+        for power in range (1, powers + 1):
+            req  = ('pwr '+ str(power))
+            size = 800                                     
+            rw_trials = 0
             
-            req           = ('pwr '+ str(power))
-            size = 800
-            
-            serial_write(req,size)
-            serial_read()
+            while True:
+                write_return = serial_write(req,size)
+                
+                if write_return == 'true':
+                    time.sleep(0.1)
+                    serial_read()
+                    rw_trials = 0
+                    
+                    break
+                
+                elif rw_trials <= 5:
+                    rw_trials  = rw_trials +1
+                    buffer     = ser.in_waiting             # debug purpose                  
+                    ser.write(b'\n')                        # send one additional CR to force response 
+                    time.sleep(0.2)
+                    serial_read()
+                    
+                    if debug == 'true':
+                        log('Debug : parsing serial - power:' + str(power)  + ' rw_trial:' + str(rw_trials) + ' err_no:' + str(errors_no) + \
+                             ' timeout in_buffer:' + str(buffer) + ' < ' + str(size) + ' line_str_array: ' + str(line_str_array))
+                    
+                    line_str_array  = []
 
-            decode         = 'false'
+                else:
+                    errors = 'true'
+                    print ('...timeouts -> close serial, skip set')
+                    log('Debug : parsing serial - power:' + str(power)  + ' rw_trial:' + str(rw_trials) + ' err_no:' + str(errors_no) + \
+                    ' timeout in_buffer:' + str(buffer) + ' < ' + str(size) + ' line_str_array: ' + str(line_str_array))
+                 
+                    if ser.is_open == True:
+                        ser.close()
+                        
+                    return
+
+            decode             = 'false'
+            line_str_array_bak = line_str_array             # for debug purpose only
             
-            for line_str in line_str_array:
-                if line_str[1:6].startswith('Power'):
+            for line_str in line_str_array:              
+                if req in line_str:                         # search for pwr X in line and mark begining of the block                        
                     decode ='true'
                     
                 #parsing data   
@@ -163,7 +199,7 @@ def parsing_serial():
                     if line_str[1:18] == 'Power Events    :': power_events = int(line_str[19:27],16)
                     if line_str[1:18] == 'System Fault    :': sys_events   = int(line_str[19:27],16)
                     
-                    if line_str[1:18] == 'Command completed':
+                    if line_str[1:18] == 'Command completed':   # mark end of the block
                         decode ='false' 
                         print ('power           :', power)
                         print ('voltage         :', voltage)    
@@ -203,8 +239,12 @@ def parsing_serial():
                         pwr.append(pwr_array)
                         line_str_array = []
                         line_str       = ""
-                        break
                         
+                        break
+                    
+            if data_set != power:
+                break
+                     
         if data_set == powers:
             statistics()
             errors='false'
@@ -216,36 +256,35 @@ def parsing_serial():
             errors = 'true'
             trials = trials+1
             
-            if trials < 6:                                                                                       
-                if ser.is_open == True:
-                    ser.close()
-
-                print ('...incomplete data sets, close serial, trying again')
-                log('Info  : parsing serial - incomplete data sets - close serial, trial #'+str(trials) + ' err_no:'+str(errors_no))
-                if debug == 'true': log('Debug : parsing serial - incomplete data sets power: ' + str(power) + ' data set: ' + str(data_set) + ' line_str_array: ' + str(line_str_array))
+            if ser.is_open == True:
+                ser.close() 
+            
+            if trials <= 3:                                                                                       
+                print ('...incomplete data sets -> try again')
+                
+                if debug == 'true':
+                    log('Debug : parsing serial - power:' + str(power) + ' trial:' + str(trials) + ' err_no:' + str(errors_no + 1) + ' incomplete data sets data set:' + str(data_set)  + ' line_str_array:' + str(line_str_array_bak))
+                    
                 parsing_serial()
 
             else:
-                if ser.is_open == True:
-                    ser.close()
-                                        
-                    print ('...incomplete data set not solved, close serial, skip set')
-                    log('Info : incomplete data set not solved - close serial, skip set - raise error')                                         
-                    
-                    return
+                print ('...incomplete data set -> not solved, close serial, skip set')
+                log('Error : parsing serial - power:' + str(power) + ' trial:' + str(trials) + ' err_no:'+str(errors_no + 1) + ' incomplete data sets: ' + str(data_set)  + ' line_str_array:' + str(line_str_array_bak))                                         
+
+                return
                     
     except Exception as e:
         errors = 'true'
         
         if ser.is_open == True:
             ser.close()
-            print ('...serial closed')
+            print ('...close serial')
             
         print('...parsing serial error: ' + str(e))
-        log('Except: parsing_serial error: '+str(e))                              #
+        log('Error : parsing serial - error: '+str(e))                              #
     
         return
-
+    
 def statistics():
     global sys_voltage
     global sys_current
@@ -269,7 +308,7 @@ def statistics():
     sys_basic_st = pwr[0]['basic_st']                                         # status will be the master status
     sys_temp     = round((sys_temp / powers), 1)
     
- def json_serialize():
+def json_serialize():
     global parsing_time
     global loops_no
     global errors_no
@@ -297,7 +336,7 @@ def statistics():
         
     except Exception as e:
         print('...json serialization error: ' + str(e))
-        log('Except: json serialization error: '+str(e))
+        log('Error : json serialization - error:'+str(e))
         errors = 'true'
         
 def maria_db():
@@ -347,7 +386,7 @@ def maria_db():
         
     except Exception as e:
         print('...mariadb writing error: '+ str(e))
-        log('Except: mariadb writing error: '+str(e))
+        log('Error : mariadb writing - error:'+ str(e))
 
 def mqtt_discovery():
     try:
@@ -416,8 +455,8 @@ def mqtt_discovery():
         print("...mqtt auto discovery initialization completed")
         
     except Exception as e:
-        print('...mqtt_discovery error' + str(e))    
-        log('Except: mqtt_discovery error: '+str(e))
+        print('...mqtt_discovery error: ' + str(e))    
+        log('Error : mqtt_discovery error:' + str(e))
         
 def mqtt_publish():
     try:
@@ -430,8 +469,9 @@ def mqtt_publish():
         print ('...mqtt publish  : ok')
         
     except Exception as e:
-        print ('...mqtt publish error' + str(e))
-        log('Except: mqtt publish error: '+str(e)) 
+        print ('...mqtt publish error: ' + str(e))
+        log('Error : mqtt publish - error:' + str(e))
+        
 # --------------------------serial initialization------------------- 
 try:
     ser = serial.Serial (port=serial_port,\
@@ -440,12 +480,14 @@ try:
           stopbits=serial.STOPBITS_ONE,\
           bytesize=serial.EIGHTBITS,\
           timeout=10)
+    
     print('...connected to: ' + ser.portstr)
     
 except Exception as e:
-    print('...serial connection error ' + str(e))
-    log('Except: open serial error: ' + str(e))  
+    print('...serial connection error: ' + str(e))
+    log('Error : open serial - error:' + str(e))  
     print('...program initialisation failed -- exit')
+    
     exit()
     
 # --------------------------mqtt auto discovery (HA)----------------
@@ -453,7 +495,7 @@ if MQTT_active =='true':  mqtt_discovery()
 
 #-----------------------------main loop-----------------------------
 print('...program initialisation completed starting main loop')
-log('Start:' + version)
+log('Start : ' + version)
 
 while True:
     if (time.time() - start_time) > reading_freq:                       
@@ -464,7 +506,7 @@ while True:
         TimeStamp      = now.strftime("%Y-%m-%d %H:%M:%S")       
         print ('relay local time:', TimeStamp)
         
-        uptime = round((time.time()- up_time)/86400,3)
+        uptime = round((time.time()- up_time)/86400, 3)
         print ('serial uptime   :', uptime)
         start_time = time.time()
         
@@ -481,7 +523,7 @@ while True:
             
         if errors != 'false' :
             errors_no = errors_no + 1
-        print ('...serial stat   :', 'loops:' , loops_no, 'errors:', errors_no, 'efficiency:', round((1-(errors_no/loops_no))*100,2))
+        print ('...serial stat   :', 'loops:' , loops_no, 'errors:', errors_no, 'efficiency:', round((1-(errors_no/loops_no))*100, 2))
         print ('...serial stat   :', 'parsing round-trip:' , round(parsing_time, 2)) 
         print ('------------------------------------------------------')
         
