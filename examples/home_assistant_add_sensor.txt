@@ -1,0 +1,10 @@
+# Example configuration.yaml entry
+
+## on top of autodiscovered sensors any parameter present in JSON file can be added like below
+
+mqtt:
+  sensor:
+    - name: pytes_uptime
+      state_topic: "homeassistant/sensor/pytes/state"  
+      value_template: '{{ value_json.serial_stat.uptime }}'
+      unit_of_measurement: ''
