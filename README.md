@@ -6,6 +6,8 @@
 Program reads serial port with a specific freqvency, parsing the data and saving a JSON file that can be used in further automation. 
 
 Optional, there is the possibility to save data to MariaDB database or to send them via MQTT.
+There is possiblity (v0.5.0+) to have cells monitoring when power_events, battery_events or system faults occured ([v0.5_changes_details](/docs/v0.5_changes_details.txt)).
+
 These options can be activated / dezactivated in configuration file (pytes_serial.cfg)
 
 When MQTT transmition is activated:
@@ -15,9 +17,9 @@ When MQTT transmition is activated:
    the battery number is embeded at the end of each sensor (i.e pytes_current_1, pytes_current_2...) 
   
   If more sensors will be needed, they can be added manually as per Home Assistant documentation [MQTT sensor](https://www.home-assistant.io/integrations/sensor.mqtt/)
-  and example provided.
-  
-You have some [examples](/examples) for better understanding of what program does.
+  and the example in docs folder [here](/docs/home_assistant_add_sensor.txt).
+
+You have more [examples](/examples) for better understanding of what program does.
 
 ### Installation and Execution
 Serial cable must be connected to battery 1 (master).
