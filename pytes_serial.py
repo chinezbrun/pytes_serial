@@ -15,8 +15,14 @@ config.read('pytes_serial.cfg')
 serial_port           = config.get('serial', 'serial_port') 
 serial_baudrate       = int(config.get('serial', 'serial_baudrate'))
 reading_freq          = int(config.get('serial', 'reading_freq'))
-powers                = int(config.get('general', 'powers'))
-output_path           = config.get('general', 'output_path') 
+output_path           = config.get('general', 'output_path')
+powers                = int(config.get('battery_info', 'powers'))        
+dev_name              = config.get('battery_info', 'dev_name')
+manufacturer          = config.get('battery_info', 'manufacturer')
+model                 = config.get('battery_info', 'model')
+sw_ver                = "PytesSerial v0.6.0_20231007"
+version               = sw_ver 
+
 if reading_freq < 10  : reading_freq = 10
 
 SQL_active            = config.get('Maria DB connection', 'SQL_active')  
@@ -111,8 +117,7 @@ sys_events_list = {
 2048:["warning","0x800","Discharge MOS FAIL"]
 }
 
-version = 'PytesSerial build: v0.5.0_20230805'
-print(version)
+print("software version:",version)
 
 # ------------------------logging definiton ----------------------------
 formatter = logging.Formatter('%(asctime)s| %(levelname)7s| %(message)s ',datefmt='%Y%m%d %H:%M:%S') # logging formating
@@ -424,7 +429,7 @@ def json_serialize():
                    'temperature': sys_temp,
                    'soc': sys_soc,
                    'basic_st': sys_basic_st,
-                   'pytes':pwr,
+                   'devices':pwr,
                    'serial_stat': {'uptime':uptime,
                                    'loops':loops_no,
                                    'errors': errors_no,
@@ -435,7 +440,7 @@ def json_serialize():
                                    'ser_round_trip':round(parsing_time,2)}
                    }
         
-        with open(output_path + 'pytes_status.json', 'w') as outfile:
+        with open(output_path + dev_name + '_status.json', 'w') as outfile:
             json.dump(json_data, outfile)
         print('...json creation:  ok')
         
@@ -497,32 +502,34 @@ def maria_db():
 def mqtt_discovery():
     try:
         MQTT_auth = None
-        if len(MQTT_username) >0:
+        if len(MQTT_username) > 0:
             MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
+
         msg          ={} 
         config       = 1
-        names        =["pytes_current", "pytes_voltage" , "pytes_temperature", "pytes_soc", "pytes_status"]
-        ids          =["current", "voltage" , "temperature", "soc", "basic_st"] #do not change the prefix "pytes_"
+        names        =["current", "voltage" , "temperature", "soc", "status"]
+        ids          =["current", "voltage" , "temperature", "soc", "basic_st"] 
         dev_cla      =["current", "voltage", "temperature", "battery","None"]
         stat_cla     =["measurement","measurement","measurement","measurement","None"]
         unit_of_meas =["A","V","°C", "%","None"]
-        
+
         # define system sensors 
         for n in range(5):
-            state_topic          ="homeassistant/sensor/pytes/"+str(config)+"/config"
+            state_topic          = "homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
             msg ["name"]         = names[n]      
-            msg ["stat_t"]       = "homeassistant/sensor/pytes/state"
-            msg ["uniq_id"]      = "pytes_"+ids[n]
-            if dev_cla[n] != "None":
+            msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
+            msg ["uniq_id"]      = dev_name + "_" + ids[n]
+            if dev_cla[n]  != "None":
                 msg ["dev_cla"]  = dev_cla[n]
             if stat_cla[n] != "None":
-                msg ["stat_cla"]  = stat_cla[n]
+                msg ["stat_cla"] = stat_cla[n]
             if unit_of_meas[n] != "None":
                 msg ["unit_of_meas"] = unit_of_meas[n]
+                
             msg ["val_tpl"]      = "{{ value_json." + ids[n]+ "}}"
-            msg ["dev"]          = {"identifiers": ["pytes"],"manufacturer": "PYTES","model": "E-Box48100R","name": "pytes_ebox","sw_version": "1.0"}
-            
+            msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}            
             message              = json.dumps(msg)
+            
             publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
             b = "...mqtt auto discovery initialization :" + str(round(config/(5*powers+5)*100)) +" %"
@@ -535,20 +542,21 @@ def mqtt_discovery():
         # define individual batteries sensors
         for power in range (1, powers+1):
             for n in range(5):
-                state_topic          ="homeassistant/sensor/pytes/"+str(config)+"/config"
+                state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
                 msg ["name"]         = names[n]+"_"+str(power)         
-                msg ["stat_t"]       = "homeassistant/sensor/pytes/state"
-                msg ["uniq_id"]      = "pytes_"+ids[n]+"_"+str(power)
+                msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
+                msg ["uniq_id"]      = dev_name + "_" +ids[n]+"_"+str(power)
                 if dev_cla[n] != "None":
                     msg ["dev_cla"]  = dev_cla[n]
                 if stat_cla[n] != "None":
                     msg ["stat_cla"]  = stat_cla[n]                    
                 if unit_of_meas[n] != "None":
                     msg ["unit_of_meas"] = unit_of_meas[n]
-                msg ["val_tpl"]      = "{{ value_json.pytes[" + str(power-1) + "]." + ids[n]+ "}}"
-                msg ["dev"]          = {"identifiers": ["pytes"],"manufacturer": "PYTES","model": "E-Box48100R","name": "pytes_ebox","sw_version": "1.0"}
-                
+                    
+                msg ["val_tpl"]      = "{{ value_json.devices[" + str(power-1) + "]." + ids[n]+ "}}"
+                msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}  
                 message              = json.dumps(msg)
+                
                 publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
                 b = "...mqtt auto discovery initialization :" + str(round(config/(5*powers+5)*100)) +" %"
@@ -569,7 +577,7 @@ def mqtt_publish():
         MQTT_auth = None
         if len(MQTT_username) >0:
             MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
-        state_topic = "homeassistant/sensor/pytes/state"
+        state_topic = "homeassistant/sensor/" + dev_name + "/state"
         message     = json.dumps(json_data)
         publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
         print ('...mqtt publish  : ok')
@@ -651,7 +659,7 @@ def parsing_bat(power):
                     if cells == 15:
                         coulomb_idx = line_str.find('SOC')         # pylon
                     else:                        
-                        coulomb_idx = line_str.find('Coulomb') + 1 # pytes
+                        coulomb_idx = line_str.find('Coulomb')     # pytes
                         
                     decode      = 'true'
 
@@ -664,7 +672,7 @@ def parsing_bat(power):
                     volt_st      = line_str[volt_st_idx:volt_st_idx+8]
                     current_st   = line_str[curr_st_idx:curr_st_idx+8]
                     temp_st      = line_str[temp_st_idx:temp_st_idx+8]
-                    coulomb      = line_str[coulomb_idx:coulomb_idx+3]
+                    coulomb      = line_str[coulomb_idx:coulomb_idx+4]
                     
                     cells_data = {
                                 'cell':cell,
