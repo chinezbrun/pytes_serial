@@ -1,5 +1,5 @@
-### pytes_serial
- Program is reading RS232 serial port of PYTES and PYLONTECH LiFePo4 batteries
+### PYTES E-BOX 48100R / PYLONTECH to Home Assistant / MariaDB 
+Program is reading RS232 serial port of PYTES and PYLONTECH LiFePo4 batteries.
  
 ### How does this software work?
  "pwr" commands is used.
@@ -38,6 +38,8 @@ Serial cable must be connected to battery 1 (master).
 5. go to the folder where the program is located (i.e cd /home/pi/Documents/pytes)
 6. execute pytes_serial.sh to have a separate terminal instance (works for Linux/Raspberry) or python3 pytes_serial.py directly from console.
    if you need setup an autostart of the program on reboot more info [here](/examples/setup_autostart.txt) 
+
+A lighter version written in Micropython for ESP32 is available here:[pytes_esp](https://github.com/chinezbrun/pytes_esp)
 
 enjoy
 
