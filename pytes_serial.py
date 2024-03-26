@@ -20,7 +20,7 @@ powers                = int(config.get('battery_info', 'powers'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.6.0_20231007"
+sw_ver                = "PytesSerial v0.6.1_20240326"
 version               = sw_ver 
 
 if reading_freq < 10  : reading_freq = 10
@@ -620,8 +620,8 @@ def check_events ():
                 cell_data_req = "true"
                 sys_events_no = sys_events_no + 1
                 
-            if cell_data_req == "true":
-                if cells_details =='true' and parsing_bat(power)=="true":
+            if cell_data_req == "true" and cells_details =='true':
+                if parsing_bat(power)=="true":
                     pass
                 else:
                     battery_events_log.info ('CHECK EVENTS - power_'+ str(power)+' cells details:cells data could not be read')
@@ -633,7 +633,7 @@ def parsing_bat(power):
     global line_str_array
     bat = []
     cells_data =[]
-        
+    
     try:
         req  = ('bat '+ str(power))
         size = 1000
@@ -650,7 +650,7 @@ def parsing_bat(power):
                 if line_str[0:6].startswith('Batt'):
                     power_idx   = line_str.find('Batt')
                     volt_idx    = line_str.find('Volt ')
-                    curr_idx    = line_str.find('Curr ')
+                    #curr_idx    = line_str.find('Curr ')
                     temp_idx    = line_str.find('Tempr ')
                     base_st_idx = line_str.find('Base State')
                     volt_st_idx = line_str.find('Volt.')
@@ -666,7 +666,7 @@ def parsing_bat(power):
                 if decode =='true' and not line_str[base_st_idx:base_st_idx+7].startswith('Absent') and not line_str[0:6].startswith('Batt'):
                     cell         = int(line_str[0:2])
                     voltage      = int(line_str[volt_idx:volt_idx+7])/1000
-                    current      = int(line_str[curr_idx:curr_idx+7])/1000
+                    #current      = int(line_str[curr_idx:curr_idx+7])/1000
                     temp         = int(line_str[temp_idx:temp_idx+7])/1000
                     basic_st     = line_str[base_st_idx:base_st_idx+8]                    
                     volt_st      = line_str[volt_st_idx:volt_st_idx+8]
@@ -677,7 +677,7 @@ def parsing_bat(power):
                     cells_data = {
                                 'cell':cell,
                                 'voltage': voltage,
-                                'current': current,
+                                #'current': current,
                                 'temp   ': temp,
                                 'basic_st': basic_st,
                                 'volt_st': volt_st,
@@ -697,8 +697,7 @@ def parsing_bat(power):
     {headers[4].capitalize(): <9}|\
     {headers[5].capitalize(): <8}|\
     {headers[6].capitalize(): <8}|\
-    {headers[7].capitalize(): <8}|\
-    {headers[8].capitalize(): <8}')
+    {headers[7].capitalize(): <8}')
             
             print(headers_str)
             battery_events_log.info (headers_str)
@@ -712,8 +711,7 @@ def parsing_bat(power):
     {cell_data[4]: <9}|\
     {cell_data[5]: <8}|\
     {cell_data[6]: <8}|\
-    {cell_data[7]: <8}|\
-    {cell_data[8]: <8}\
+    {cell_data[7]: <8}\
     ')                
                 print(cell_data_str)
                 battery_events_log.info (cell_data_str)
