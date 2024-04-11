@@ -20,7 +20,7 @@ powers                = int(config.get('battery_info', 'powers'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.6.1_20240326"
+sw_ver                = "PytesSerial v0.6.2_20240411"
 version               = sw_ver 
 
 if reading_freq < 10  : reading_freq = 10
@@ -753,6 +753,7 @@ pytes_serial_log.info ('START - ' + version)
 battery_events_log.info ('START - ' + version)
 
 while True:
+    time.sleep(0.2)
     if (time.time() - start_time) > reading_freq:                       
         
         loops_no       = loops_no +1                                    
