@@ -20,7 +20,7 @@ powers                = int(config.get('battery_info', 'powers'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.6.2_20240411"
+sw_ver                = "PytesSerial v0.7.0_20240425"
 version               = sw_ver 
 
 if reading_freq < 10  : reading_freq = 10
@@ -48,6 +48,7 @@ LOGGING_LEVEL_FILE     = (log_level_info[LOGGING_LEVEL])
 LOGGING_FILE_MAX_SIZE  = int(config.get('logging', 'LOGGING_FILE_MAX_SIZE'))
 LOGGING_FILE_MAX_FILES = int(config.get('logging', 'LOGGING_FILE_MAX_FILES'))
 
+cells_monitoring       = config.get('events', 'cells_monitoring')
 events_monitoring      = config.get('events', 'events_monitoring')
 cells                  = int(config.get('events', 'cells'))
 cells_details          = config.get('events', 'cells_details')
@@ -56,6 +57,8 @@ cells_details_level    = config.get('events', 'cells_details_level')
 start_time            = time.time()                         # init time
 up_time               = time.time()                         # used to calculate uptime
 pwr                   = []                                  # used to serialise JSON data
+bat                   = []                                  # used to record cells data -- def parsing_bat 
+bats                  = []                                  # used to serialise JSON data -- def check_cells
 loops_no              = 0                                   # used to count no of loops and to calculate % of errors
 errors_no             = 0                                   # used to count no of errors and to calculate %
 trials                = 0                                   # used to improve data reading accuracy -- def parsing_serial
@@ -421,6 +424,7 @@ def json_serialize():
     global bat_events_no
     global pwr_events_no
     global sys_events_no
+    global bats
     try:
         json_data={'relay_local_time':TimeStamp,                   
                    'powers' : powers,
@@ -430,6 +434,7 @@ def json_serialize():
                    'soc': sys_soc,
                    'basic_st': sys_basic_st,
                    'devices':pwr,
+                   'cells_data':bats, 
                    'serial_stat': {'uptime':uptime,
                                    'loops':loops_no,
                                    'errors': errors_no,
@@ -501,20 +506,24 @@ def maria_db():
         
 def mqtt_discovery():
     try:
+        config    = 1
+        max_config= 0
+        msg       = {}
         MQTT_auth = None
+        
         if len(MQTT_username) > 0:
             MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
 
-        msg          ={} 
-        config       = 1
+        # define system sensors 
         names        =["current", "voltage" , "temperature", "soc", "status"]
         ids          =["current", "voltage" , "temperature", "soc", "basic_st"] 
         dev_cla      =["current", "voltage", "temperature", "battery","None"]
         stat_cla     =["measurement","measurement","measurement","measurement","None"]
         unit_of_meas =["A","V","°C", "%","None"]
-
-        # define system sensors 
-        for n in range(5):
+        
+        max_config   = max_config + len(ids)
+        
+        for n in range(len(ids)):
             state_topic          = "homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
             msg ["name"]         = names[n]      
             msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
@@ -529,19 +538,28 @@ def mqtt_discovery():
             msg ["val_tpl"]      = "{{ value_json." + ids[n]+ "}}"
             msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}            
             message              = json.dumps(msg)
-            
-            publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
-            b = "...mqtt auto discovery initialization :" + str(round(config/(5*powers+5)*100)) +" %"
+            publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=False)
+
+            b = "...mqtt auto discovery - system sensors:" + str(round(config/max_config *100)) +" %"
             print (b, end="\r")
             
-            msg                  ={}
+            msg                  = {}
             config               = config +1
-            time.sleep(2)
+
+        print("...mqtt auto discovery")
         
         # define individual batteries sensors
+        names        =["current", "voltage" , "temperature", "soc", "status"]
+        ids          =["current", "voltage" , "temperature", "soc", "basic_st"] 
+        dev_cla      =["current", "voltage", "temperature", "battery","None"]
+        stat_cla     =["measurement","measurement","measurement","measurement","None"]
+        unit_of_meas =["A","V","°C", "%","None"]
+        
+        max_config   = max_config + powers*len(ids)      
+        
         for power in range (1, powers+1):
-            for n in range(5):
+            for n in range(len(ids)):
                 state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
                 msg ["name"]         = names[n]+"_"+str(power)         
                 msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
@@ -559,15 +577,58 @@ def mqtt_discovery():
                 
                 publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
-                b = "...mqtt auto discovery initialization :" + str(round(config/(5*powers+5)*100)) +" %"
+                b = "...mqtt auto discovery - battery sensors:" + str(round(config/max_config *100)) +" %"
                 print (b, end="\r")
                 
                 msg                  ={}
                 config               = config +1
-                time.sleep(2)
-                
-        print("...mqtt auto discovery initialization completed")
+                max_config           = len(ids)+ powers*len(ids)
+
+        print("...mqtt auto discovery")
         
+        # define individual cells sensors
+        if cells_monitoring == 'true':        
+            names        =["voltage" , "temperature", "soc", "status", "volt_st", "curr_st", "temp_st"]
+            ids          =["voltage" , "temperature", "soc", "basic_st", "volt_st", "curr_st", "temp_st"] 
+            dev_cla      =["voltage", "temperature", "battery","None","None","None","None"]
+            stat_cla     =["measurement","measurement","measurement","None","None","None","None"]
+            unit_of_meas =["V","°C", "%","None","None","None","None"]
+            
+            max_config   = max_config + powers*len(ids)*cells
+
+            for power in range (1, powers+1):
+                for n in range(len(ids)):
+                    for cell in range(1, cells+1):
+                        if cell < 10:
+                            cell_no ="0" + str(cell)
+                        else:
+                            cell_no ="" + str(cell)
+                            
+                        state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
+                        msg ["name"]         = names[n]+"_"+str(power) + cell_no        
+                        msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
+                        msg ["uniq_id"]      = dev_name + "_" +ids[n]+"_"+str(power) + cell_no
+                        if dev_cla[n] != "None":
+                            msg ["dev_cla"]  = dev_cla[n]
+                        if stat_cla[n] != "None":
+                            msg ["stat_cla"]  = stat_cla[n]                    
+                        if unit_of_meas[n] != "None":
+                            msg ["unit_of_meas"] = unit_of_meas[n]
+                            
+                        msg ["val_tpl"]      = "{{ value_json.cells_data[" + str(power-1) + "]["+ '"cells"' +"][" + str(cell-1) + "]." + ids[n]+ "}}" 
+                        msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}  
+                        message              = json.dumps(msg)
+
+                        publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
+
+                        b = "...mqtt auto discovery - cell sensors:" + str(round(config/max_config *100)) +" %"
+                        print (b, end="\r")                        
+                        
+                        msg                  ={}
+                        config               = config +1
+                        
+            print("...mqtt auto discovery")
+
     except Exception as e:
         print('...mqtt_discovery error: ' + str(e))    
         pytes_serial_log.warning ('MQTT DISCOVERY - error handling message: '  + str(e))
@@ -596,33 +657,66 @@ def check_events ():
         for power in range (1, powers+1):
             cell_data_req = "false"
             
-            if pwr[power-1]['bat_events'] != 0 and (power_events_list[pwr[power-1]['bat_events']][0] == cells_details_level or cells_details_level =="info"):
+            if pwr[power-1]['bat_events'] != 0 and (power_events_list[pwr[power-1]['bat_events']][0] == cells_details_level or cells_details_level =="info"): 
                 print('...bat_event logged  :', str(power_events_list[pwr[power-1]['bat_events']][1]))
-                battery_events_log.info ('CHECK EVENTS - bat_events:' +  str(power_events_list[pwr[power-1]['bat_events']][1]) + \
-                    ' details:' + str(pwr[power-1]))
-                
+                 
                 cell_data_req = "true"
                 bat_events_no = bat_events_no + 1
                 
             if pwr[power-1]['power_events'] != 0 and (power_events_list[pwr[power-1]['power_events']][0] == cells_details_level or cells_details_level =="info"):
                 print('...power_event logged:', str(power_events_list[pwr[power-1]['power_events']][1]))
-                battery_events_log.info ('CHECK EVENTS - power_events:' + str(power_events_list[pwr[power-1]['power_events']][1]) + \
-                    ' details:' + str(pwr[power-1]))
-                
+
                 cell_data_req = "true"
                 pwr_events_no = pwr_events_no + 1
                 
             if pwr[power-1]['sys_events'] != 0 and (sys_events_list[pwr[power-1]['sys_events']][0] == cells_details_level or cells_details_level =="info"):
                 print('...sys_event logged  :', str(sys_events_list[pwr[power-1]['sys_events']][2]))
-                battery_events_log.info ('CHECK EVENTS - sys_events:' + str(sys_events_list[pwr[power-1]['sys_events']][2]) + \
-                    ' details:' + str(pwr[power-1]))
-                
+
                 cell_data_req = "true"
                 sys_events_no = sys_events_no + 1
                 
             if cell_data_req == "true" and cells_details =='true':
                 if parsing_bat(power)=="true":
+                    print("------------------------------------------------------")
+                    headers     = list(bat[0].keys()) + ['bat_events', 'pwr_events', 'sys_events']
+                    headers_str = (f'{headers[0].capitalize(): <5}|\
+{headers[1].capitalize(): <4}|\
+{headers[2].capitalize(): <8}|\
+{headers[3].capitalize(): <11}|\
+{headers[4].capitalize(): <9}|\
+{headers[5].capitalize(): <8}|\
+{headers[6].capitalize(): <8}|\
+{headers[7].capitalize(): <8}|\
+{headers[8].capitalize(): <5}|\
+{headers[9].capitalize(): <10}|\
+{headers[10].capitalize(): <10}|\
+{headers[11].capitalize(): <10}')        
+                    
+                    print(headers_str)
+                    battery_events_log.info (headers_str)
+                    
+                    for n in range(cells):
+                        cell_data = list (bat[n].values()) + [power_events_list[pwr[power-1]['bat_events']][1],power_events_list[pwr[power-1]['power_events']][1],sys_events_list[pwr[power-1]['sys_events']][1]] 
+                        cell_data_str = (f'{cell_data[0]: <5}|\
+{cell_data[1]: <4}|\
+{cell_data[2]: <8}|\
+{cell_data[3]: <11}|\
+{cell_data[4]: <9}|\
+{cell_data[5]: <8}|\
+{cell_data[6]: <8}|\
+{cell_data[7]: <8}|\
+{cell_data[8]: <5}|\
+{cell_data[9]: <10}|\
+{cell_data[10]: <10}|\
+{cell_data[11]: <10}|\
+                ')                
+                        print(cell_data_str)
+                        battery_events_log.info (cell_data_str)
+                        
+                    print("------------------------------------------------------")                   
+                    
                     pass
+                
                 else:
                     battery_events_log.info ('CHECK EVENTS - power_'+ str(power)+' cells details:cells data could not be read')
                 
@@ -631,9 +725,10 @@ def check_events ():
         
 def parsing_bat(power):
     global line_str_array
+    global bat
     bat = []
-    cells_data =[]
-    
+    cell_data =[]
+
     try:
         req  = ('bat '+ str(power))
         size = 1000
@@ -641,90 +736,105 @@ def parsing_bat(power):
         
         if write_return == 'true':
             read_return = serial_read('Battery','Command completed')
-            
-        if line_str_array and read_return == 'true':
-            for line_str in line_str_array:
-                if line_str[1:18] == 'Command completed':
-                    decode ='false'
-                    
-                if line_str[0:6].startswith('Batt'):
-                    power_idx   = line_str.find('Batt')
-                    volt_idx    = line_str.find('Volt ')
-                    #curr_idx    = line_str.find('Curr ')
-                    temp_idx    = line_str.find('Tempr ')
-                    base_st_idx = line_str.find('Base State')
-                    volt_st_idx = line_str.find('Volt.')
-                    curr_st_idx = line_str.find('Curr.')
-                    temp_st_idx = line_str.find('Temp.')
-                    if cells == 15:
-                        coulomb_idx = line_str.find('SOC')         # pylon
-                    else:                        
-                        coulomb_idx = line_str.find('Coulomb')     # pytes
+
+            if line_str_array and read_return == 'true':
+                for line_str in line_str_array:
+                    if line_str[1:18] == 'Command completed':
+                        decode ='false'
                         
-                    decode      = 'true'
+                    if line_str[0:6].startswith('Batt'):
+                        power_idx   = line_str.find('Batt')
+                        volt_idx    = line_str.find('Volt ')
+                        #curr_idx    = line_str.find('Curr ')
+                        temp_idx    = line_str.find('Tempr ')
+                        base_st_idx = line_str.find('Base State')
+                        volt_st_idx = line_str.find('Volt.')
+                        curr_st_idx = line_str.find('Curr.')
+                        temp_st_idx = line_str.find('Temp.')
+                        if cells == 15:
+                            coulomb_idx = line_str.find('SOC')         # pylon
+                        else:                        
+                            coulomb_idx = line_str.find('Coulomb')     # pytes
+                            
+                        decode      = 'true'
 
-                if decode =='true' and not line_str[base_st_idx:base_st_idx+7].startswith('Absent') and not line_str[0:6].startswith('Batt'):
-                    cell         = int(line_str[0:2])
-                    voltage      = int(line_str[volt_idx:volt_idx+7])/1000
-                    #current      = int(line_str[curr_idx:curr_idx+7])/1000
-                    temp         = int(line_str[temp_idx:temp_idx+7])/1000
-                    basic_st     = line_str[base_st_idx:base_st_idx+8]                    
-                    volt_st      = line_str[volt_st_idx:volt_st_idx+8]
-                    current_st   = line_str[curr_st_idx:curr_st_idx+8]
-                    temp_st      = line_str[temp_st_idx:temp_st_idx+8]
-                    coulomb      = line_str[coulomb_idx:coulomb_idx+4]
-                    
-                    cells_data = {
-                                'cell':cell,
-                                'voltage': voltage,
-                                #'current': current,
-                                'temp   ': temp,
-                                'basic_st': basic_st,
-                                'volt_st': volt_st,
-                                'curr_st': current_st,
-                                'temp_st':temp_st,
-                                'SOC':coulomb}
+                    if decode =='true' and not line_str[base_st_idx:base_st_idx+7].startswith('Absent') and not line_str[0:6].startswith('Batt'):
+                        cell         = int(line_str[0:2])
+                        voltage      = int(line_str[volt_idx:volt_idx+7])/1000
+                        #current      = int(line_str[curr_idx:curr_idx+7])/1000
+                        temp         = int(line_str[temp_idx:temp_idx+7])/1000
+                        basic_st     = line_str[base_st_idx:base_st_idx+8]                    
+                        volt_st      = line_str[volt_st_idx:volt_st_idx+8]
+                        current_st   = line_str[curr_st_idx:curr_st_idx+8]
+                        temp_st      = line_str[temp_st_idx:temp_st_idx+8]
+                        coulomb      = int(line_str[coulomb_idx:coulomb_idx+3])
+                        
+                        cell_data = {
+                                    'power':power,
+                                    'cell':cell+1,
+                                    'voltage': voltage,
+                                    #'current': current,
+                                    'temperature': temp,
+                                    'basic_st': basic_st,
+                                    'volt_st': volt_st,
+                                    'curr_st': current_st,
+                                    'temp_st':temp_st,
+                                    'soc':coulomb}
 
-                    bat.append(cells_data)
-                    
-            print("------------------------------------------------------")
-            
-            headers     = list(bat[0].keys())
-            headers_str = (f'{headers[0].capitalize(): <5}|\
-    {headers[1].capitalize(): <8}|\
-    {headers[2].capitalize(): <8}|\
-    {headers[3].capitalize(): <8}|\
-    {headers[4].capitalize(): <9}|\
-    {headers[5].capitalize(): <8}|\
-    {headers[6].capitalize(): <8}|\
-    {headers[7].capitalize(): <8}')
-            
-            print(headers_str)
-            battery_events_log.info (headers_str)
-            
-            for n in range(cells):
-                cell_data = list (bat[n].values())
-                cell_data_str = (f'{cell_data[0]: <5}|\
-    {cell_data[1]: <8}|\
-    {cell_data[2]: <8}|\
-    {cell_data[3]: <8}|\
-    {cell_data[4]: <9}|\
-    {cell_data[5]: <8}|\
-    {cell_data[6]: <8}|\
-    {cell_data[7]: <8}\
-    ')                
-                print(cell_data_str)
-                battery_events_log.info (cell_data_str)
-                
-            print("------------------------------------------------------")
-            return "true"
-        
+                        bat.append(cell_data)
+                        
+                return "true"
+            else:
+                return "false"        
         else:
             return "false"
             
     except Exception as e:
         pytes_serial_log.info ('PARSING BAT - error handling message: ' + str(e))
-        
+
+def check_cells():
+    global bats
+    try:
+        for power in range (1, powers+1):
+            if parsing_bat(power)=="true":
+                
+               # statistics -- calculate min,mix of cells data of each power    
+                output = {"voltage" : [float('inf'),float('-inf')],
+                          "temperature" : [float('inf'),float('-inf')]
+                          }
+                for item in bat:
+                    for each in output.keys():
+                        if item[each]<output[each][0]:
+                            output[each][0] = item[each]
+                                
+                        if item[each]>output[each][1]:
+                            output[each][1] = item[each]
+                         
+                #stat = {'voltage_delta':round(output['voltage'][1] - output['voltage'][0],3),\
+                #              'voltage_min':min(output['voltage']),\
+                #              'voltage_max':max(output['voltage']),\
+                #              'temperature_delta': round(output['temperature'][1] - output['temperature'][0],3),\
+                #              'temperature_min':min(output['temperature']),\
+                #              'temperature_max':max(output['temperature'])\
+                #              }
+
+                #bat.append(stat)
+                stat = {'voltage_delta':round(output['voltage'][1] - output['voltage'][0],3),\
+                              'voltage_min':min(output['voltage']),\
+                              'voltage_max':max(output['voltage']),\
+                              'temperature_delta': round(output['temperature'][1] - output['temperature'][0],3),\
+                              'temperature_min':min(output['temperature']),\
+                              'temperature_max':max(output['temperature']),\
+                              'cells':bat}
+                
+                bats.append(stat)
+                
+            else:
+                pass 
+
+    except Exception as e:
+        pytes_serial_log.info ('CHECK CELLS - error handling message: ' + str(e))
+
 # --------------------------serial initialization------------------- 
 try:
     ser = serial.Serial (port=serial_port,\
@@ -767,13 +877,18 @@ while True:
         start_time = time.time()
         
         if errors == 'false':
-            parsing_time = time.time()
+            parsing_ser_time = time.time()
             parsing_serial()
-            parsing_time = time.time() - parsing_time
+            parsing_time = time.time() - parsing_ser_time
+            
+        if cells_monitoring == 'true' and errors == 'false':
+            check_cells_time = time.time()
+            check_cells()
+            parsing_time = parsing_time + (time.time() - check_cells_time)
             
         if events_monitoring=='true' and errors == 'false':
             check_events()
-            
+        
         if errors == 'false':
             json_serialize()
             
@@ -793,5 +908,6 @@ while True:
         
         #clear variables
         pwr        = []
+        bats       = []
         errors     = 'false'
         trials     = 0
