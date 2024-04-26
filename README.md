@@ -1,12 +1,15 @@
 ### PYTES E-BOX 48100R / PYLONTECH to Home Assistant / MariaDB 
 Program is reading RS232 serial port of PYTES and PYLONTECH LiFePo4 batteries.
- 
+
 ### How does this software work?
- "pwr" commands is used.
+ "pwr" and "bat" commands are used.
 Program reads serial port with a specific freqvency, parsing the data and saving a JSON file that can be used in further automation. 
 
-Optional, there is the possibility to save data to MariaDB database or to send them via MQTT.
-There is possiblity (v0.5.0+) to have cells monitoring when power_events, battery_events or system faults occured ([v0.5_changes_details](/docs/v0.5_changes_details.txt)).
+Configurable OPTIONS:
+- record data to MariaDB
+- send data via MQTT
+- events monitoring - when power_events, battery_events or system faults occured a log file is created with cells details  [v0.5_changes_details](/docs/v0.5_changes_details.txt))
+- cell monitoring - read cells details for all batteries in bank
 
 These options can be activated / dezactivated in configuration file (pytes_serial.cfg)
 
@@ -14,7 +17,8 @@ When MQTT transmition is activated:
 - JSON file is send as payload to the following topic: 'homeassistant/sensor/pytes/state'
 - program has build-in integration with Home Assisant where the following sensors will be automatic created for each battery:
   "current", "voltage", "temperature", "soc", "status"
-   the battery number is embeded at the end of each sensor (i.e current_1, current_2...) 
+   the battery number is embeded at the end of each sensor (i.e current_1, current_2...)
+   when cell monitoring is activated an additional device will be created in Home Assistant with sufix "_cells" with all associated sensors. The battery and cell number is embeded at the end of each sensor ( i.e. voltage_102 means voltage for battery 1 cell 2)
   
   If more sensors will be needed, they can be added manually as per Home Assistant documentation [MQTT sensor](https://www.home-assistant.io/integrations/sensor.mqtt/)
   and the example in docs folder [here](/docs/home_assistant_add_sensor.txt).
