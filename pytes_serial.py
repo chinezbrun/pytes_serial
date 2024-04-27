@@ -20,7 +20,7 @@ powers                = int(config.get('battery_info', 'powers'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.7.0_20240425"
+sw_ver                = "PytesSerial v0.7.0_20240427"
 version               = sw_ver 
 
 if reading_freq < 10  : reading_freq = 10
@@ -582,12 +582,13 @@ def mqtt_discovery():
                 
                 msg                  ={}
                 config               = config +1
-                max_config           = len(ids)+ powers*len(ids)
+                #max_config           = len(ids)+ powers*len(ids)
 
         print("...mqtt auto discovery")
         
         # define individual cells sensors
-        if cells_monitoring == 'true':        
+        if cells_monitoring == 'true':
+            
             names        =["voltage" , "temperature", "soc", "status", "volt_st", "curr_st", "temp_st"]
             ids          =["voltage" , "temperature", "soc", "basic_st", "volt_st", "curr_st", "temp_st"] 
             dev_cla      =["voltage", "temperature", "battery","None","None","None","None"]
@@ -627,7 +628,41 @@ def mqtt_discovery():
                         msg                  ={}
                         config               = config +1
                         
-            print("...mqtt auto discovery")
+            # define individual cells sensors -- statistics            
+            names        =["voltage_delta" , "voltage_min", "voltage_max", "temperature_delta", "temperature_min", "temperature_max"]
+            ids          =["voltage_delta" , "voltage_min", "voltage_max", "temperature_delta", "temperature_min", "temperature_max"]
+            dev_cla      =["voltage", "voltage", "voltage","temperature","temperature","temperature"]
+            stat_cla     =["measurement","measurement","measurement","measurement","measurement","measurement"]
+            unit_of_meas =["V","V","V","°C","°C","°C","°C" ]
+            
+            max_config   = max_config + powers*len(ids)
+
+            for power in range (1, powers+1):
+                for n in range(len(ids)):
+                    state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
+                    msg ["name"]         = names[n]+"_"+str(power)         
+                    msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
+                    msg ["uniq_id"]      = dev_name + "_" +ids[n]+"_"+str(power)
+                    if dev_cla[n] != "None":
+                        msg ["dev_cla"]  = dev_cla[n]
+                    if stat_cla[n] != "None":
+                        msg ["stat_cla"]  = stat_cla[n]                    
+                    if unit_of_meas[n] != "None":
+                        msg ["unit_of_meas"] = unit_of_meas[n]
+                        
+                    msg ["val_tpl"]      = "{{ value_json.cells_data[" + str(power-1) + "]." + ids[n]+ "}}" 
+                    msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}  
+                    message              = json.dumps(msg)
+
+                    publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
+
+                    b = "...mqtt auto discovery - statistics sensors:" + str(round(config/max_config *100)) +" %"
+                    print (b, end="\r")                        
+                    
+                    msg                  ={}
+                    config               = config +1
+                    
+        print("...mqtt auto discovery")
 
     except Exception as e:
         print('...mqtt_discovery error: ' + str(e))    
