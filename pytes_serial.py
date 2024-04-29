@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 import logging
 from logging.handlers import RotatingFileHandler
 import serial
