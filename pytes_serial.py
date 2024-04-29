@@ -777,6 +777,8 @@ def parsing_bat(power):
         if read_return != 'true' or not line_str_array:
             return "false"
 
+        pytes_serial_log.debug("parsing_bat: line_str_array = " + json.dumps(line_str_array, indent=2))
+
         cell_idx        = -1
         volt_idx        = -1
         curr_idx        = -1
