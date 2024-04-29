@@ -516,27 +516,27 @@ def mqtt_discovery():
             MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
 
         # define system sensors
-        names        =["current", "voltage" , "temperature", "soc", "status"]
-        ids          =["current", "voltage" , "temperature", "soc", "basic_st"]
-        dev_cla      =["current", "voltage", "temperature", "battery","None"]
-        stat_cla     =["measurement","measurement","measurement","measurement","None"]
-        unit_of_meas =["A","V","°C", "%","None"]
+        names        =["current",       "voltage" ,     "temperature",  "soc",          "status"]
+        ids          =["current",       "voltage" ,     "temperature",  "soc",          "basic_st"]
+        dev_cla      =["current",       "voltage",      "temperature",  "battery",      None]
+        stat_cla     =["measurement",   "measurement",  "measurement",  "measurement",  None]
+        unit_of_meas =["A",             "V",            "°C",           "%",            None]
 
         max_config   = max_config + len(ids)
 
         for n in range(len(ids)):
-            state_topic          = "homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
-            msg ["name"]         = names[n]
-            msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
             msg ["uniq_id"]      = dev_name + "_" + ids[n]
-            if dev_cla[n]  != "None":
+            state_topic          = "homeassistant/sensor/" + dev_name + "/" + msg["uniq_id"] + "/config"
+            msg ["name"]         = names[n]
+            msg ["stat_t"]       = "pytes_serial/" + dev_name + "/" + ids[n]
+            if dev_cla[n]  != None:
                 msg ["dev_cla"]  = dev_cla[n]
-            if stat_cla[n] != "None":
+            if stat_cla[n] != None:
                 msg ["stat_cla"] = stat_cla[n]
-            if unit_of_meas[n] != "None":
+            if unit_of_meas[n] != None:
                 msg ["unit_of_meas"] = unit_of_meas[n]
 
-            msg ["val_tpl"]      = "{{ value_json." + ids[n]+ "}}"
+            msg ["val_tpl"]      = "{{ value_json.value }}"
             msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}
             message              = json.dumps(msg)
 
@@ -551,28 +551,28 @@ def mqtt_discovery():
         print("...mqtt auto discovery")
 
         # define individual batteries sensors
-        names        =["current", "voltage" , "temperature", "soc", "status"]
-        ids          =["current", "voltage" , "temperature", "soc", "basic_st"]
-        dev_cla      =["current", "voltage", "temperature", "battery","None"]
-        stat_cla     =["measurement","measurement","measurement","measurement","None"]
-        unit_of_meas =["A","V","°C", "%","None"]
+        names        =["current",       "voltage" ,     "temperature",  "soc",          "status"]
+        ids          =["current",       "voltage" ,     "temperature",  "soc",          "basic_st"]
+        dev_cla      =["current",       "voltage",      "temperature",  "battery",      None]
+        stat_cla     =["measurement",   "measurement",  "measurement",  "measurement",  None]
+        unit_of_meas =["A",             "V",            "°C",           "%",            None]
 
         max_config   = max_config + powers*len(ids)
 
         for power in range (1, powers+1):
             for n in range(len(ids)):
-                state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
+                msg ["uniq_id"]      = dev_name + "_" + ids[n] +"_" + str(power)
+                state_topic          = "homeassistant/sensor/" + dev_name + "/" + msg["uniq_id"] + "/config"
                 msg ["name"]         = names[n]+"_"+str(power)
-                msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
-                msg ["uniq_id"]      = dev_name + "_" +ids[n]+"_"+str(power)
-                if dev_cla[n] != "None":
+                msg ["stat_t"]       = "pytes_serial/" + dev_name + "/" + str(power-1) + "/" + ids[n]
+                if dev_cla[n] != None:
                     msg ["dev_cla"]  = dev_cla[n]
-                if stat_cla[n] != "None":
+                if stat_cla[n] != None:
                     msg ["stat_cla"]  = stat_cla[n]
-                if unit_of_meas[n] != "None":
+                if unit_of_meas[n] != None:
                     msg ["unit_of_meas"] = unit_of_meas[n]
 
-                msg ["val_tpl"]      = "{{ value_json.devices[" + str(power-1) + "]." + ids[n]+ "}}"
+                msg ["val_tpl"]      = "{{ value_json.value }}"
                 msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}
                 message              = json.dumps(msg)
 
@@ -590,11 +590,11 @@ def mqtt_discovery():
         # define individual cells sensors
         if cells_monitoring == 'true':
 
-            names        =["voltage" , "temperature", "soc", "status", "volt_st", "curr_st", "temp_st"]
-            ids          =["voltage" , "temperature", "soc", "basic_st", "volt_st", "curr_st", "temp_st"]
-            dev_cla      =["voltage", "temperature", "battery","None","None","None","None"]
-            stat_cla     =["measurement","measurement","measurement","None","None","None","None"]
-            unit_of_meas =["V","°C", "%","None","None","None","None"]
+            names        =["voltage",       "temperature",  "soc",          "status",   "volt_st",  "curr_st",  "temp_st"]
+            ids          =["voltage",       "temperature",  "soc",          "basic_st", "volt_st",  "curr_st",  "temp_st"]
+            dev_cla      =["voltage",       "temperature",  "battery",      None,       None,       None,       None]
+            stat_cla     =["measurement",   "measurement",  "measurement",  None,       None,       None,       None]
+            unit_of_meas =["V",             "°C",           "%",            None,       None,       None,       None]
 
             max_config   = max_config + powers*len(ids)*cells
 
@@ -606,18 +606,18 @@ def mqtt_discovery():
                         else:
                             cell_no ="" + str(cell)
 
-                        state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
+                        msg ["uniq_id"]      = dev_name + "_" + ids[n] + "_" + str(power) + cell_no
+                        state_topic          = "homeassistant/sensor/" + dev_name + "/" + msg["uniq_id"] + "/config"
                         msg ["name"]         = names[n]+"_"+str(power) + cell_no
-                        msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
-                        msg ["uniq_id"]      = dev_name + "_" +ids[n]+"_"+str(power) + cell_no
-                        if dev_cla[n] != "None":
+                        msg ["stat_t"]       = "pytes_serial/" + dev_name + "/" + str(power-1) + "/cells/" + str(cell-1) + "/" + ids[n]
+                        if dev_cla[n] != None:
                             msg ["dev_cla"]  = dev_cla[n]
-                        if stat_cla[n] != "None":
+                        if stat_cla[n] != None:
                             msg ["stat_cla"]  = stat_cla[n]
-                        if unit_of_meas[n] != "None":
+                        if unit_of_meas[n] != None:
                             msg ["unit_of_meas"] = unit_of_meas[n]
 
-                        msg ["val_tpl"]      = "{{ value_json.cells_data[" + str(power-1) + "]["+ '"cells"' +"][" + str(cell-1) + "]." + ids[n]+ "}}"
+                        msg ["val_tpl"]      = "{{ value_json.value }}"
                         msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
                         message              = json.dumps(msg)
 
@@ -630,20 +630,20 @@ def mqtt_discovery():
                         config               = config +1
 
             # define individual cells sensors -- statistics
-            names        =["voltage_delta" , "voltage_min", "voltage_max", "temperature_delta", "temperature_min", "temperature_max"]
-            ids          =["voltage_delta" , "voltage_min", "voltage_max", "temperature_delta", "temperature_min", "temperature_max"]
-            dev_cla      =["voltage", "voltage", "voltage","temperature","temperature","temperature"]
-            stat_cla     =["measurement","measurement","measurement","measurement","measurement","measurement"]
-            unit_of_meas =["V","V","V","°C","°C","°C","°C" ]
+            names        =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
+            ids          =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
+            dev_cla      =["voltage",       "voltage",      "voltage",      "temperature",          "temperature",      "temperature"]
+            stat_cla     =["measurement",   "measurement",  "measurement",  "measurement",          "measurement",      "measurement"]
+            unit_of_meas =["V",             "V",            "V",            "°C",                   "°C",               "°C"]
 
             max_config   = max_config + powers*len(ids)
 
             for power in range (1, powers+1):
                 for n in range(len(ids)):
-                    state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
+                    msg ["uniq_id"]      = dev_name + "_" + ids[n] + "_" + str(power)
+                    state_topic          = "homeassistant/sensor/" + dev_name + "/" + msg["uniq_id"] + "/config"
                     msg ["name"]         = names[n]+"_"+str(power)
-                    msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
-                    msg ["uniq_id"]      = dev_name + "_" +ids[n]+"_"+str(power)
+                    msg ["stat_t"]       = "pytes_serial/" + dev_name + "/" + str(power-1) + "/cells/" + ids[n]
                     if dev_cla[n] != "None":
                         msg ["dev_cla"]  = dev_cla[n]
                     if stat_cla[n] != "None":
@@ -651,7 +651,7 @@ def mqtt_discovery():
                     if unit_of_meas[n] != "None":
                         msg ["unit_of_meas"] = unit_of_meas[n]
 
-                    msg ["val_tpl"]      = "{{ value_json.cells_data[" + str(power-1) + "]." + ids[n]+ "}}"
+                    msg ["val_tpl"]      = "{{ value_json.value }}"
                     msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
                     message              = json.dumps(msg)
 
@@ -674,9 +674,69 @@ def mqtt_publish():
         MQTT_auth = None # type: publish.AuthParameter | None
         if len(MQTT_username) >0:
             MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
-        state_topic = "homeassistant/sensor/" + dev_name + "/state"
-        message     = json.dumps(json_data)
-        publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
+
+        # Publish system topics
+        for key, value in json_data.items():
+            # We will publish these later
+            if key in ["devices", "cells_data"]:
+                continue
+
+            state_topic = "pytes_serial/" + dev_name + "/" + key
+            if isinstance(value, dict) or isinstance(value, list):
+                message = json.dumps(value)
+            else:
+                message = json.dumps({'value': value})
+            publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
+
+        # Publish device topics
+        for device in json_data["devices"]:
+            device_idx = str(device["power"] - 1)
+
+            for key, value in device.items():
+                # Do not publish these
+                if key in ["power"]:
+                    continue
+
+                state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/" + key
+                if isinstance(value, dict) or isinstance(value, list):
+                    message = json.dumps(value)
+                else:
+                    message = json.dumps({'value': value})
+                publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
+
+        if cells_monitoring == 'true':
+            for device in json_data["cells_data"]:
+                device_idx = str(device["power"] - 1)
+
+                # Publish cell statistics
+                for key, value in device.items():
+                    # Do not publish these
+                    if key in ["power", "cells"]:
+                        continue
+
+                    state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/cells/" + key
+                    if isinstance(value, dict) or isinstance(value, list):
+                        message = json.dumps(value)
+                    else:
+                        message = json.dumps({'value': value})
+                    publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
+
+                # Publish cell topics
+                for cell in device["cells"]:
+                    cell_idx = str(cell["cell"] - 1)
+
+                    for key, value in cell.items():
+                        # Do not publish these
+                        if key in ["cell"]:
+                            continue
+
+                        state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/cells/" + cell_idx + "/" + key
+                        if isinstance(value, dict) or isinstance(value, list):
+                            message = json.dumps(value)
+                        else:
+                            message = json.dumps({'value': value})
+                        publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
+
         print ('...mqtt publish  : ok')
 
     except Exception as e:
@@ -832,8 +892,6 @@ def parsing_bat(power):
                 line = re.split(r'\s{2,}', line_str.strip()) # Each column is delimited by at least 2 spaces
                 cell_data = {} # type: dict[str, int|float|str]
 
-                cell_data['power'] = power
-
                 if cell_idx != -1:
                     cell_data['cell']           = int(line[cell_idx]) + 1
                 if volt_idx != -1:
@@ -889,13 +947,16 @@ def check_cells():
                 #              }
 
                 #bat.append(stat)
-                stat = {'voltage_delta':round(output['voltage'][1] - output['voltage'][0],3),\
-                              'voltage_min':min(output['voltage']),\
-                              'voltage_max':max(output['voltage']),\
-                              'temperature_delta': round(output['temperature'][1] - output['temperature'][0],3),\
-                              'temperature_min':min(output['temperature']),\
-                              'temperature_max':max(output['temperature']),\
-                              'cells':bat}
+                stat = {
+                    'power':power,
+                    'voltage_delta':round(output['voltage'][1] - output['voltage'][0],3),
+                    'voltage_min':output['voltage'][0],
+                    'voltage_max':output['voltage'][1],
+                    'temperature_delta': round(output['temperature'][1] - output['temperature'][0],3),
+                    'temperature_min':output['temperature'][0],
+                    'temperature_max':output['temperature'][1],
+                    'cells':bat
+                }
 
                 bats.append(stat)
 
