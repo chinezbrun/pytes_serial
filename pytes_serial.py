@@ -850,7 +850,7 @@ def parsing_bat(power):
                 if is_pylontech and soc_idx != -1:
                     cell_data['soc']            = int(line[soc_idx][:-1])               # %
                 if is_pylontech and coulomb_idx != -1:
-                    cell_data['coulomb']        = int(line[coulomb_idx][:-3]) / 1000    # Ah
+                    cell_data['coulomb']        = int(line[coulomb_idx][:-4]) / 1000    # Ah
 
                 bat.append(cell_data)
 
