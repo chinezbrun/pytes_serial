@@ -7,29 +7,30 @@ import json
 import mysql.connector as mariadb
 from configparser import ConfigParser
 import paho.mqtt.publish as publish
+import re
 
-# ---------------------------variables initialization---------- 
+# ---------------------------variables initialization----------
 config                = ConfigParser()
 config.read('pytes_serial.cfg')
 
-serial_port           = config.get('serial', 'serial_port') 
+serial_port           = config.get('serial', 'serial_port')
 serial_baudrate       = int(config.get('serial', 'serial_baudrate'))
 reading_freq          = int(config.get('serial', 'reading_freq'))
 output_path           = config.get('general', 'output_path')
-powers                = int(config.get('battery_info', 'powers'))        
+powers                = int(config.get('battery_info', 'powers'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
 sw_ver                = "PytesSerial v0.7.0_20240427"
-version               = sw_ver 
+version               = sw_ver
 
 if reading_freq < 10  : reading_freq = 10
 
-SQL_active            = config.get('Maria DB connection', 'SQL_active')  
-host                  = config.get('Maria DB connection', 'host')  
-db_port               = config.get('Maria DB connection', 'db_port')  
-user                  = config.get('Maria DB connection', 'user')  
-password              = config.get('Maria DB connection', 'password')  
+SQL_active            = config.get('Maria DB connection', 'SQL_active')
+host                  = config.get('Maria DB connection', 'host')
+db_port               = config.get('Maria DB connection', 'db_port')
+user                  = config.get('Maria DB connection', 'user')
+password              = config.get('Maria DB connection', 'password')
 database              = config.get('Maria DB connection', 'database')
 
 MQTT_active           = config.get('MQTT', 'MQTT_active')
@@ -38,8 +39,8 @@ MQTT_port             = int(config.get('MQTT', 'MQTT_port'))
 MQTT_username         = config.get('MQTT', 'MQTT_username')
 MQTT_password         = config.get('MQTT', 'MQTT_password')
 
-LOGGING_LEVEL          = config.get('logging', 'LOGGING_LEVEL')  
-log_level_info = {'logging.DEBUG': logging.DEBUG, 
+LOGGING_LEVEL          = config.get('logging', 'LOGGING_LEVEL')
+log_level_info = {'logging.DEBUG': logging.DEBUG,
                 'logging.INFO': logging.INFO,
                 'logging.WARNING': logging.WARNING,
                 'logging.ERROR': logging.ERROR,
@@ -57,19 +58,19 @@ cells_details_level    = config.get('events', 'cells_details_level')
 start_time            = time.time()                         # init time
 up_time               = time.time()                         # used to calculate uptime
 pwr                   = []                                  # used to serialise JSON data
-bat                   = []                                  # used to record cells data -- def parsing_bat 
+bat                   = []                                  # used to record cells data -- def parsing_bat
 bats                  = []                                  # used to serialise JSON data -- def check_cells
 loops_no              = 0                                   # used to count no of loops and to calculate % of errors
 errors_no             = 0                                   # used to count no of errors and to calculate %
 trials                = 0                                   # used to improve data reading accuracy -- def parsing_serial
 errors                = 'false'
-line_str_array        = []                                  # used to get line strings from serial
+line_str_array        = []                                  # type: list[str] # used to get line strings from serial
 bat_events_no         = 0                                   # used to count numbers of battery events
 pwr_events_no         = 0                                   # used to count numbers of power events
 sys_events_no         = 0                                   # used to count numbers of system events
 
 power_events_list = {
-0:["info","0x0","No events"],    
+0:["info","0x0","No events"],
 1:["warning","0x1","Overvoltage alarm"],
 2:["warning","0x2","High voltage alarm"],
 4:["info","0x4","*tbc*The voltage is normal"],
@@ -105,7 +106,7 @@ power_events_list = {
 }
 
 sys_events_list = {
-0:["info","0x0","No events"],    
+0:["info","0x0","No events"],
 1:["warning","0x1","Reverse connection of external power input"],
 2:["warning","0x2","External power input overvoltage"],
 4:["warning","0x4","Current detection error"],
@@ -125,11 +126,11 @@ print("software version:",version)
 # ------------------------logging definiton ----------------------------
 formatter = logging.Formatter('%(asctime)s| %(levelname)7s| %(message)s ',datefmt='%Y%m%d %H:%M:%S') # logging formating
 def setup_logger(name, log_file, level=LOGGING_LEVEL_FILE):
-    
+
     """To setup as many loggers as you want"""
     handler = RotatingFileHandler(log_file, mode='a', maxBytes=LOGGING_FILE_MAX_SIZE*1000, backupCount=LOGGING_FILE_MAX_FILES, encoding=None, delay=0)
     handler.setFormatter(formatter)
-    logger = logging.getLogger(name)  
+    logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.addHandler(handler)
 
@@ -142,15 +143,15 @@ battery_events_log  = setup_logger('battery_events', 'battery_events.log')
 def serial_write(req, size):
     try:
         loop_time = time.time()
-        
+
         if ser.is_open != True:
             ser.open()
             time.sleep(0.5)
             print ('...open serial')
-            
+
         ser.reset_input_buffer()
         ser.reset_output_buffer()
-        
+
         bytes_req = bytes(str(req), 'latin-1')
         ser.write(bytes_req + b'\n')
         ser.flush()
@@ -158,8 +159,8 @@ def serial_write(req, size):
 
         while True:
             if ser.in_waiting > size:
-                print ('...writing complete, in buffer: ', ser.in_waiting , round((time.time() - loop_time),2))                
-                return "true"            
+                print ('...writing complete, in buffer: ', ser.in_waiting , round((time.time() - loop_time),2))
+                return "true"
 
             elif (time.time() - loop_time) > 1:
                 return "false"
@@ -170,64 +171,64 @@ def serial_write(req, size):
                 ser.write(bytes_req + b'\n')
                 ser.flush()
                 time.sleep(0.25)
-                
+
             else:
                 ser.write(b'\n')
-                time.sleep(0.1)            
- 
+                time.sleep(0.1)
+
     except Exception as e:
         print('...serial write error: '+ str(e))
         pytes_serial_log.warning ('SERIAL WRITE - error handling message: '+ str(e))
-        
+
 def serial_read(start,stop):
     try:
         global line_str_array
         line_str        = ""
         line_str_array  = []
-        
+
         if ser.is_open != True:
             ser.open()
             time.sleep(0.5)
             print ('...open serial')
-            
+
         while True:
             if ser.in_waiting > 0:
                 line          = ser.read()
                 line_str      = line_str + line.decode('latin-1')
-                
+
                 if line == b'\n':
                     if start == 'none' or start in line_str:
                         start = 'true'
-               
+
                     if start == 'true' and stop != 'true':
                         line_str_array.append(line_str)
-                        
+
                     if start == 'true' and stop in line_str:
                         stop = 'true'
-                    
+
                     line_str = ""
-                    
+
             else:
                  break
-                
+
         return stop
-    
+
     except Exception as e:
         print('...serial read error: ' + str(e))
         pytes_serial_log.warning ('SERIAL READ - error handling message: ' + str(e))
         pytes_serial_log.debug ('SERIAL READ - line:' + str(line)  + ' line_str_array: ' + str(line_str_array))
-            
+
         line_str_array = []
-        
+
 def parsing_serial():
     try:
         global line_str_array
         global errors
         global trials
-        global pwr                                                                                 
-        volt_st      = None                                                                        
-        current_st   = None   
-        temp_st      = None     
+        global pwr
+        volt_st      = None
+        current_st   = None
+        temp_st      = None
         coul_st      = None
         soh_st       = None
         heater_st    = None
@@ -238,92 +239,92 @@ def parsing_serial():
         data_set           = 0
         pwr                = []
         line_str_array_bak = []
-        
+
         for power in range (1, powers + 1):
             req  = ('pwr '+ str(power))
-            size = 800                                     
+            size = 800
             rw_trials = 0
-            
+
             while True:
                 write_return = serial_write(req,size)
-                
+
                 if write_return == 'true':
                     read_return = serial_read(req,'Command completed')
-                    
+
                     if line_str_array and read_return == 'true':
                         rw_trials = 0
                         break
-                    
+
                     else:
                         pass
-                
+
                 elif rw_trials <= 5:
                     rw_trials  = rw_trials +1
                     buffer     = ser.in_waiting
-                    
+
                     serial_read('none','none')
                     pytes_serial_log.debug ('PARSING SERIAL - power:' + str(power)  + ' rw_trial:' + str(rw_trials) + ' err_no:' + str(errors_no) + \
                          ' timeout in_buffer:' + str(buffer) + ' < ' + str(size) + ' line_str_array: ' + str(line_str_array))
-                        
+
                     line_str_array  = []
 
                 else:
                     errors = 'true'
                     buffer     = ser.in_waiting
-                    
+
                     print ('...timeouts -> close serial, skip set')
                     pytes_serial_log.error ('PARSING SERIAL - power:' + str(power)  + ' rw_trial:' + str(rw_trials) + ' err_no:' + str(errors_no) + \
                     ' timeouts -> close serial in_buffer:' + str(buffer) + ' < ' + str(size) + ' line_str_array: ' + str(line_str_array))
-                    
+
                     if ser.is_open == True:
                         ser.close()
-                        
+
                     return
 
             decode             = 'false'
             line_str_array_bak = line_str_array             # for debug purpose only
-            
-            for line_str in line_str_array:              
-                if req in line_str:                         # search for pwr X in line and mark begining of the block                        
+
+            for line_str in line_str_array:
+                if req in line_str:                         # search for pwr X in line and mark begining of the block
                     decode ='true'
-                    
-                #parsing data   
+
+                #parsing data
                 if decode =='true':
                     if line_str[1:18] == 'Voltage         :': voltage      = round(int(line_str[19:27])/1000, 2)
                     if line_str[1:18] == 'Current         :': current      = round(int(line_str[19:27])/1000, 2)
                     if line_str[1:18] == 'Temperature     :': temp         = round(int(line_str[19:27])/1000, 1)
                     if line_str[1:18] == 'Coulomb         :': soc          = int(line_str[19:27])
-                    if line_str[1:18] == 'Basic Status    :': basic_st     = line_str[19:27]        
-                    if line_str[1:18] == 'Volt Status     :': volt_st      = line_str[19:27]      
-                    if line_str[1:18] == 'Current Status  :': current_st   = line_str[19:27]    
-                    if line_str[1:18] == 'Tmpr. Status    :': temp_st      = line_str[19:27]     
+                    if line_str[1:18] == 'Basic Status    :': basic_st     = line_str[19:27]
+                    if line_str[1:18] == 'Volt Status     :': volt_st      = line_str[19:27]
+                    if line_str[1:18] == 'Current Status  :': current_st   = line_str[19:27]
+                    if line_str[1:18] == 'Tmpr. Status    :': temp_st      = line_str[19:27]
                     if line_str[1:18] == 'Coul. Status    :': coul_st      = line_str[19:27]
                     if line_str[1:18] == 'Soh. Status     :': soh_st       = line_str[19:27]
                     if line_str[1:18] == 'Heater Status   :': heater_st    = line_str[19:27]
                     if line_str[1:18] == 'Bat Events      :': bat_events   = int(line_str[19:27],16)
                     if line_str[1:18] == 'Power Events    :': power_events = int(line_str[19:27],16)
                     if line_str[1:18] == 'System Fault    :': sys_events   = int(line_str[19:27],16)
-                    
+
                     if line_str[1:18] == 'Command completed':   # mark end of the block
                         try:
-                            decode ='false' 
+                            decode ='false'
                             print ('power           :', power)
-                            print ('voltage         :', voltage)    
+                            print ('voltage         :', voltage)
                             print ('current         :', current)
                             print ('temperature     :', temp)
                             print ('soc [%]         :', soc)
-                            print ('basic_st        :', basic_st)         
-                            print ('volt_st         :', volt_st)      
-                            print ('current_st      :', current_st)     
-                            print ('temp_st         :', temp_st)     
+                            print ('basic_st        :', basic_st)
+                            print ('volt_st         :', volt_st)
+                            print ('current_st      :', current_st)
+                            print ('temp_st         :', temp_st)
                             print ('coul_st         :', coul_st)
                             print ('soh_st          :', soh_st)
                             print ('heater_st       :', heater_st)
                             print ('bat_events      :', bat_events)
                             print ('power_events    :', power_events)
-                            print ('sys_fault       :', sys_events)              
+                            print ('sys_fault       :', sys_events)
                             print ('---------------------------')
-                            
+
                             pwr_array = {
                                         'power': power,
                                         'voltage': voltage,
@@ -340,58 +341,58 @@ def parsing_serial():
                                         'bat_events': bat_events,
                                         'power_events': power_events,
                                         'sys_events': sys_events}
-                                    
+
                             data_set       = data_set +1
                             pwr.append(pwr_array)
                             line_str_array = []
                             line_str       = ""
-                            
+
                             break
-                        
+
                         except Exception as e:
                             pytes_serial_log.warning ('PARSING SERIAL - error handling message: '+str(e))
-                                
+
             if data_set != power:
                 break
-                     
+
         if data_set == powers:
             statistics()
             errors='false'
             trials=0
-            
+
             print ('...serial parsing: ok')
 
         else:
             errors = 'true'
             trials = trials+1
-                
-            if trials <= 3:                                                                                       
+
+            if trials <= 3:
                 print ('...incomplete data sets -> try again')
                 pytes_serial_log.debug ('PARSING SERIAL - power:' + str(power) + ' trial:' + str(trials) + ' err_no:' + str(errors_no) + ' incomplete data sets data set:' + str(data_set)  + ' line_str_array:' + str(line_str_array_bak))
-                
+
                 parsing_serial()
 
             else:
                 print ('...incomplete data set -> not solved, close serial, skip set')
                 pytes_serial_log.error ('PARSING SERIAL - power:' + str(power) + ' trial:' + str(trials) + ' err_no:'+str(errors_no) + ' incomplete data sets: ' + str(data_set)  + ' line_str_array:' + str(line_str_array_bak))
-                
+
                 if ser.is_open == True:
                     ser.close()
-                    
+
                 return
-                    
+
     except Exception as e:
         errors = 'true'
-           
+
         print('...parsing serial error: ' + str(e))
         pytes_serial_log.error ('PARSING SERIAL - error handling message: '+str(e))
-        
+
         if ser.is_open == True:
             ser.close()
             print ('...close serial')
-            
+
         return
-    
+
 def statistics():
     global sys_voltage
     global sys_current
@@ -406,15 +407,15 @@ def statistics():
 
     for power in range (1, powers+1):
         sys_voltage       = sys_voltage + pwr[power-1]['voltage']             # voltage will be the average of all batteries
-        sys_current       = round((sys_current + pwr[power-1]['current']),1)  # current will be sum of all banks          
+        sys_current       = round((sys_current + pwr[power-1]['current']),1)  # current will be sum of all banks
         sys_soc           = sys_soc + pwr[power-1]['soc']                     # soc will be the average of all batteries
         sys_temp          = sys_temp + pwr[power-1]['temperature']            # temperature will be the average of all batteries
-   
-    sys_voltage  = round((sys_voltage / powers), 1)    
-    sys_soc      = int(sys_soc / powers)   
+
+    sys_voltage  = round((sys_voltage / powers), 1)
+    sys_soc      = int(sys_soc / powers)
     sys_basic_st = pwr[0]['basic_st']                                         # status will be the master status
     sys_temp     = round((sys_temp / powers), 1)
-    
+
 def json_serialize():
     global parsing_time
     global loops_no
@@ -426,7 +427,7 @@ def json_serialize():
     global sys_events_no
     global bats
     try:
-        json_data={'relay_local_time':TimeStamp,                   
+        json_data={'relay_local_time':TimeStamp,
                    'powers' : powers,
                    'voltage': sys_voltage,
                    'current': sys_current,
@@ -434,7 +435,7 @@ def json_serialize():
                    'soc': sys_soc,
                    'basic_st': sys_basic_st,
                    'devices':pwr,
-                   'cells_data':bats, 
+                   'cells_data':bats,
                    'serial_stat': {'uptime':uptime,
                                    'loops':loops_no,
                                    'errors': errors_no,
@@ -444,21 +445,21 @@ def json_serialize():
                                    'efficiency' :round((1-(errors_no/loops_no))*100,2),
                                    'ser_round_trip':round(parsing_time,2)}
                    }
-        
+
         with open(output_path + dev_name + '_status.json', 'w') as outfile:
             json.dump(json_data, outfile)
         print('...json creation:  ok')
-        
+
     except Exception as e:
         print('...json serialization error: ' + str(e))
         pytes_serial_log.error ('JSON SERIALIZATION - error handling message: ' + str(e))
-        
+
         errors = 'true'
-        
+
 def maria_db():
     try:
         mydb = mariadb.connect(host=host,port=db_port,user=user,password=password,database=database)
-        
+
         for power in range (1, powers+1):
             values= (pwr[power-1]['power'],
                      pwr[power-1]['voltage'],
@@ -499,33 +500,33 @@ def maria_db():
         mycursor.close()
         mydb.close()
         print ('...mariadb upload: ok')
-        
+
     except Exception as e:
         print('...mariadb writing error: '+ str(e))
         pytes_serial_log.warning ('MARIADB WRITING - error handling message: '+ str(e))
-        
+
 def mqtt_discovery():
     try:
         config    = 1
         max_config= 0
         msg       = {}
         MQTT_auth = None
-        
+
         if len(MQTT_username) > 0:
             MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
 
-        # define system sensors 
+        # define system sensors
         names        =["current", "voltage" , "temperature", "soc", "status"]
-        ids          =["current", "voltage" , "temperature", "soc", "basic_st"] 
+        ids          =["current", "voltage" , "temperature", "soc", "basic_st"]
         dev_cla      =["current", "voltage", "temperature", "battery","None"]
         stat_cla     =["measurement","measurement","measurement","measurement","None"]
         unit_of_meas =["A","V","°C", "%","None"]
-        
+
         max_config   = max_config + len(ids)
-        
+
         for n in range(len(ids)):
             state_topic          = "homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
-            msg ["name"]         = names[n]      
+            msg ["name"]         = names[n]
             msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
             msg ["uniq_id"]      = dev_name + "_" + ids[n]
             if dev_cla[n]  != "None":
@@ -534,67 +535,67 @@ def mqtt_discovery():
                 msg ["stat_cla"] = stat_cla[n]
             if unit_of_meas[n] != "None":
                 msg ["unit_of_meas"] = unit_of_meas[n]
-                
+
             msg ["val_tpl"]      = "{{ value_json." + ids[n]+ "}}"
-            msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}            
+            msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}
             message              = json.dumps(msg)
 
             publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=False)
 
             b = "...mqtt auto discovery - system sensors:" + str(round(config/max_config *100)) +" %"
             print (b, end="\r")
-            
+
             msg                  = {}
             config               = config +1
 
         print("...mqtt auto discovery")
-        
+
         # define individual batteries sensors
         names        =["current", "voltage" , "temperature", "soc", "status"]
-        ids          =["current", "voltage" , "temperature", "soc", "basic_st"] 
+        ids          =["current", "voltage" , "temperature", "soc", "basic_st"]
         dev_cla      =["current", "voltage", "temperature", "battery","None"]
         stat_cla     =["measurement","measurement","measurement","measurement","None"]
         unit_of_meas =["A","V","°C", "%","None"]
-        
-        max_config   = max_config + powers*len(ids)      
-        
+
+        max_config   = max_config + powers*len(ids)
+
         for power in range (1, powers+1):
             for n in range(len(ids)):
                 state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
-                msg ["name"]         = names[n]+"_"+str(power)         
+                msg ["name"]         = names[n]+"_"+str(power)
                 msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
                 msg ["uniq_id"]      = dev_name + "_" +ids[n]+"_"+str(power)
                 if dev_cla[n] != "None":
                     msg ["dev_cla"]  = dev_cla[n]
                 if stat_cla[n] != "None":
-                    msg ["stat_cla"]  = stat_cla[n]                    
+                    msg ["stat_cla"]  = stat_cla[n]
                 if unit_of_meas[n] != "None":
                     msg ["unit_of_meas"] = unit_of_meas[n]
-                    
+
                 msg ["val_tpl"]      = "{{ value_json.devices[" + str(power-1) + "]." + ids[n]+ "}}"
-                msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}  
+                msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}
                 message              = json.dumps(msg)
-                
+
                 publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
                 b = "...mqtt auto discovery - battery sensors:" + str(round(config/max_config *100)) +" %"
                 print (b, end="\r")
-                
+
                 msg                  ={}
                 config               = config +1
                 #max_config           = len(ids)+ powers*len(ids)
 
         print("...mqtt auto discovery")
-        
+
         # define individual cells sensors
         if cells_monitoring == 'true':
-            
+
             names        =["voltage" , "temperature", "soc", "status", "volt_st", "curr_st", "temp_st"]
-            ids          =["voltage" , "temperature", "soc", "basic_st", "volt_st", "curr_st", "temp_st"] 
+            ids          =["voltage" , "temperature", "soc", "basic_st", "volt_st", "curr_st", "temp_st"]
             dev_cla      =["voltage", "temperature", "battery","None","None","None","None"]
             stat_cla     =["measurement","measurement","measurement","None","None","None","None"]
             unit_of_meas =["V","°C", "%","None","None","None","None"]
-            
+
             max_config   = max_config + powers*len(ids)*cells
 
             for power in range (1, powers+1):
@@ -604,70 +605,70 @@ def mqtt_discovery():
                             cell_no ="0" + str(cell)
                         else:
                             cell_no ="" + str(cell)
-                            
+
                         state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
-                        msg ["name"]         = names[n]+"_"+str(power) + cell_no        
+                        msg ["name"]         = names[n]+"_"+str(power) + cell_no
                         msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
                         msg ["uniq_id"]      = dev_name + "_" +ids[n]+"_"+str(power) + cell_no
                         if dev_cla[n] != "None":
                             msg ["dev_cla"]  = dev_cla[n]
                         if stat_cla[n] != "None":
-                            msg ["stat_cla"]  = stat_cla[n]                    
+                            msg ["stat_cla"]  = stat_cla[n]
                         if unit_of_meas[n] != "None":
                             msg ["unit_of_meas"] = unit_of_meas[n]
-                            
-                        msg ["val_tpl"]      = "{{ value_json.cells_data[" + str(power-1) + "]["+ '"cells"' +"][" + str(cell-1) + "]." + ids[n]+ "}}" 
-                        msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}  
+
+                        msg ["val_tpl"]      = "{{ value_json.cells_data[" + str(power-1) + "]["+ '"cells"' +"][" + str(cell-1) + "]." + ids[n]+ "}}"
+                        msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
                         message              = json.dumps(msg)
 
                         publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
                         b = "...mqtt auto discovery - cell sensors:" + str(round(config/max_config *100)) +" %"
-                        print (b, end="\r")                        
-                        
+                        print (b, end="\r")
+
                         msg                  ={}
                         config               = config +1
-                        
-            # define individual cells sensors -- statistics            
+
+            # define individual cells sensors -- statistics
             names        =["voltage_delta" , "voltage_min", "voltage_max", "temperature_delta", "temperature_min", "temperature_max"]
             ids          =["voltage_delta" , "voltage_min", "voltage_max", "temperature_delta", "temperature_min", "temperature_max"]
             dev_cla      =["voltage", "voltage", "voltage","temperature","temperature","temperature"]
             stat_cla     =["measurement","measurement","measurement","measurement","measurement","measurement"]
             unit_of_meas =["V","V","V","°C","°C","°C","°C" ]
-            
+
             max_config   = max_config + powers*len(ids)
 
             for power in range (1, powers+1):
                 for n in range(len(ids)):
                     state_topic          ="homeassistant/sensor/" + dev_name + "/" + str(config) + "/config"
-                    msg ["name"]         = names[n]+"_"+str(power)         
+                    msg ["name"]         = names[n]+"_"+str(power)
                     msg ["stat_t"]       = "homeassistant/sensor/" + dev_name + "/state"
                     msg ["uniq_id"]      = dev_name + "_" +ids[n]+"_"+str(power)
                     if dev_cla[n] != "None":
                         msg ["dev_cla"]  = dev_cla[n]
                     if stat_cla[n] != "None":
-                        msg ["stat_cla"]  = stat_cla[n]                    
+                        msg ["stat_cla"]  = stat_cla[n]
                     if unit_of_meas[n] != "None":
                         msg ["unit_of_meas"] = unit_of_meas[n]
-                        
-                    msg ["val_tpl"]      = "{{ value_json.cells_data[" + str(power-1) + "]." + ids[n]+ "}}" 
-                    msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}  
+
+                    msg ["val_tpl"]      = "{{ value_json.cells_data[" + str(power-1) + "]." + ids[n]+ "}}"
+                    msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
                     message              = json.dumps(msg)
 
                     publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
                     b = "...mqtt auto discovery - statistics sensors:" + str(round(config/max_config *100)) +" %"
-                    print (b, end="\r")                        
-                    
+                    print (b, end="\r")
+
                     msg                  ={}
                     config               = config +1
-                    
+
         print("...mqtt auto discovery")
 
     except Exception as e:
-        print('...mqtt_discovery error: ' + str(e))    
+        print('...mqtt_discovery error: ' + str(e))
         pytes_serial_log.warning ('MQTT DISCOVERY - error handling message: '  + str(e))
-        
+
 def mqtt_publish():
     try:
         MQTT_auth = None
@@ -677,39 +678,39 @@ def mqtt_publish():
         message     = json.dumps(json_data)
         publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
         print ('...mqtt publish  : ok')
-        
+
     except Exception as e:
         print ('...mqtt publish error: ' + str(e))
         pytes_serial_log.warning ('MQTT PUBLISH - error handling message: ' + str(e))
-        
+
 def check_events ():
     global pwr
     global bat_events_no
     global pwr_events_no
     global sys_events_no
-    
+
     try:
         for power in range (1, powers+1):
             cell_data_req = "false"
-            
-            if pwr[power-1]['bat_events'] != 0 and (power_events_list[pwr[power-1]['bat_events']][0] == cells_details_level or cells_details_level =="info"): 
+
+            if pwr[power-1]['bat_events'] != 0 and (power_events_list[pwr[power-1]['bat_events']][0] == cells_details_level or cells_details_level =="info"):
                 print('...bat_event logged  :', str(power_events_list[pwr[power-1]['bat_events']][1]))
-                 
+
                 cell_data_req = "true"
                 bat_events_no = bat_events_no + 1
-                
+
             if pwr[power-1]['power_events'] != 0 and (power_events_list[pwr[power-1]['power_events']][0] == cells_details_level or cells_details_level =="info"):
                 print('...power_event logged:', str(power_events_list[pwr[power-1]['power_events']][1]))
 
                 cell_data_req = "true"
                 pwr_events_no = pwr_events_no + 1
-                
+
             if pwr[power-1]['sys_events'] != 0 and (sys_events_list[pwr[power-1]['sys_events']][0] == cells_details_level or cells_details_level =="info"):
                 print('...sys_event logged  :', str(sys_events_list[pwr[power-1]['sys_events']][2]))
 
                 cell_data_req = "true"
                 sys_events_no = sys_events_no + 1
-                
+
             if cell_data_req == "true" and cells_details =='true':
                 if parsing_bat(power)=="true":
                     print("------------------------------------------------------")
@@ -725,13 +726,13 @@ def check_events ():
 {headers[8].capitalize(): <5}|\
 {headers[9].capitalize(): <10}|\
 {headers[10].capitalize(): <10}|\
-{headers[11].capitalize(): <10}')        
-                    
+{headers[11].capitalize(): <10}')
+
                     print(headers_str)
                     battery_events_log.info (headers_str)
-                    
+
                     for n in range(cells):
-                        cell_data = list (bat[n].values()) + [power_events_list[pwr[power-1]['bat_events']][1],power_events_list[pwr[power-1]['power_events']][1],sys_events_list[pwr[power-1]['sys_events']][1]] 
+                        cell_data = list (bat[n].values()) + [power_events_list[pwr[power-1]['bat_events']][1],power_events_list[pwr[power-1]['power_events']][1],sys_events_list[pwr[power-1]['sys_events']][1]]
                         cell_data_str = (f'{cell_data[0]: <5}|\
 {cell_data[1]: <4}|\
 {cell_data[2]: <8}|\
@@ -744,86 +745,117 @@ def check_events ():
 {cell_data[9]: <10}|\
 {cell_data[10]: <10}|\
 {cell_data[11]: <10}|\
-                ')                
+                ')
                         print(cell_data_str)
                         battery_events_log.info (cell_data_str)
-                        
-                    print("------------------------------------------------------")                   
-                    
+
+                    print("------------------------------------------------------")
+
                     pass
-                
+
                 else:
                     battery_events_log.info ('CHECK EVENTS - power_'+ str(power)+' cells details:cells data could not be read')
-                
+
     except Exception as e:
         pytes_serial_log.warning ('CHECK EVENTS - error handling message: ' + str(e))
-        
+
 def parsing_bat(power):
     global line_str_array
     global bat
     bat = []
-    cell_data =[]
 
     try:
         req  = ('bat '+ str(power))
         size = 1000
         write_return = serial_write(req,size)
-        
-        if write_return == 'true':
-            read_return = serial_read('Battery','Command completed')
 
-            if line_str_array and read_return == 'true':
-                for line_str in line_str_array:
-                    if line_str[1:18] == 'Command completed':
-                        decode ='false'
-                        
-                    if line_str[0:6].startswith('Batt'):
-                        power_idx   = line_str.find('Batt')
-                        volt_idx    = line_str.find('Volt ')
-                        #curr_idx    = line_str.find('Curr ')
-                        temp_idx    = line_str.find('Tempr ')
-                        base_st_idx = line_str.find('Base State')
-                        volt_st_idx = line_str.find('Volt.')
-                        curr_st_idx = line_str.find('Curr.')
-                        temp_st_idx = line_str.find('Temp.')
-                        if cells == 15:
-                            coulomb_idx = line_str.find('SOC')         # pylon
-                        else:                        
-                            coulomb_idx = line_str.find('Coulomb')     # pytes
-                            
-                        decode      = 'true'
-
-                    if decode =='true' and not line_str[base_st_idx:base_st_idx+7].startswith('Absent') and not line_str[0:6].startswith('Batt'):
-                        cell         = int(line_str[0:2])
-                        voltage      = int(line_str[volt_idx:volt_idx+7])/1000
-                        #current      = int(line_str[curr_idx:curr_idx+7])/1000
-                        temp         = int(line_str[temp_idx:temp_idx+7])/1000
-                        basic_st     = line_str[base_st_idx:base_st_idx+8]                    
-                        volt_st      = line_str[volt_st_idx:volt_st_idx+8]
-                        current_st   = line_str[curr_st_idx:curr_st_idx+8]
-                        temp_st      = line_str[temp_st_idx:temp_st_idx+8]
-                        coulomb      = int(line_str[coulomb_idx:coulomb_idx+3])
-                        
-                        cell_data = {
-                                    'power':power,
-                                    'cell':cell+1,
-                                    'voltage': voltage,
-                                    #'current': current,
-                                    'temperature': temp,
-                                    'basic_st': basic_st,
-                                    'volt_st': volt_st,
-                                    'curr_st': current_st,
-                                    'temp_st':temp_st,
-                                    'soc':coulomb}
-
-                        bat.append(cell_data)
-                        
-                return "true"
-            else:
-                return "false"        
-        else:
+        if write_return != 'true':
             return "false"
-            
+
+        read_return = serial_read('Battery','Command completed')
+
+        if read_return != 'true' or not line_str_array:
+            return "false"
+
+        cell_idx        = -1
+        volt_idx        = -1
+        curr_idx        = -1
+        temp_idx        = -1
+        base_st_idx     = -1
+        volt_st_idx     = -1
+        curr_st_idx     = -1
+        temp_st_idx     = -1
+        soc_idx         = -1
+        coulomb_idx     = -1
+        is_pylontech    = False
+
+        for i, line_str in enumerate(line_str_array):
+            # Last line is command completed message
+            if i == len(line_str_array) - 1:
+                break
+
+            # First line is table header
+            elif i == 0:
+                line = re.split(r'\s{2,}', line_str.strip()) # type: list[str] # Each column is delimited by at least 2 spaces
+
+                for j, l in enumerate(line):
+                    if l == 'Battery':
+                        cell_idx = j
+                    elif l == 'Volt':
+                        volt_idx = j
+                    elif l == 'Curr':
+                        curr_idx = j
+                    elif l == 'Tempr':
+                        temp_idx = j
+                    elif l == 'Base State':
+                        base_st_idx = j
+                    elif l == 'Volt. State':
+                        volt_st_idx = j
+                    elif l == 'Curr. State':
+                        curr_st_idx = j
+                    elif l == 'Temp. State':
+                        temp_st_idx = j
+                    elif l == 'SOC':
+                        soc_idx = j
+                    elif l == 'Coulomb':
+                        coulomb_idx = j
+
+                is_pylontech = soc_idx != -1
+
+            # All the other lines are cell data
+            else:
+                line = re.split(r'\s{2,}', line_str.strip()) # Each column is delimited by at least 2 spaces
+                cell_data = {} # type: dict[str, int|float|str]
+
+                cell_data['power'] = power
+
+                if cell_idx != -1:
+                    cell_data['cell']           = int(line[cell_idx]) + 1
+                if volt_idx != -1:
+                    cell_data['voltage']        = int(line[volt_idx]) / 1000            # V
+                if curr_idx != -1:
+                    cell_data['current']        = int(line[curr_idx]) / 1000            # A
+                if temp_idx != -1:
+                    cell_data['temperature']    = int(line[temp_idx]) / 1000            # deg C
+                if base_st_idx != -1:
+                    cell_data['basic_st']       = line[base_st_idx]
+                if volt_st_idx != -1:
+                    cell_data['volt_st']        = line[volt_st_idx]
+                if curr_st_idx != -1:
+                    cell_data['curr_st']        = line[curr_st_idx]
+                if temp_st_idx != -1:
+                    cell_data['temp_st']        = line[temp_st_idx]
+                if not is_pylontech and coulomb_idx != -1:
+                    cell_data['soc']            = int(line[coulomb_idx])                # %
+                if is_pylontech and soc_idx != -1:
+                    cell_data['soc']            = int(line[soc_idx][:-1])               # %
+                if is_pylontech and coulomb_idx != -1:
+                    cell_data['coulomb']        = int(line[coulomb_idx][:-3]) / 1000    # Ah
+
+                bat.append(cell_data)
+
+        return "true"
+
     except Exception as e:
         pytes_serial_log.info ('PARSING BAT - error handling message: ' + str(e))
 
@@ -832,8 +864,8 @@ def check_cells():
     try:
         for power in range (1, powers+1):
             if parsing_bat(power)=="true":
-                
-               # statistics -- calculate min,mix of cells data of each power    
+
+               # statistics -- calculate min,mix of cells data of each power
                 output = {"voltage" : [float('inf'),float('-inf')],
                           "temperature" : [float('inf'),float('-inf')]
                           }
@@ -841,10 +873,10 @@ def check_cells():
                     for each in output.keys():
                         if item[each]<output[each][0]:
                             output[each][0] = item[each]
-                                
+
                         if item[each]>output[each][1]:
                             output[each][1] = item[each]
-                         
+
                 #stat = {'voltage_delta':round(output['voltage'][1] - output['voltage'][0],3),\
                 #              'voltage_min':min(output['voltage']),\
                 #              'voltage_max':max(output['voltage']),\
@@ -861,16 +893,16 @@ def check_cells():
                               'temperature_min':min(output['temperature']),\
                               'temperature_max':max(output['temperature']),\
                               'cells':bat}
-                
+
                 bats.append(stat)
-                
+
             else:
-                pass 
+                pass
 
     except Exception as e:
         pytes_serial_log.info ('CHECK CELLS - error handling message: ' + str(e))
 
-# --------------------------serial initialization------------------- 
+# --------------------------serial initialization-------------------
 try:
     ser = serial.Serial (port=serial_port,\
           baudrate=serial_baudrate,\
@@ -878,16 +910,16 @@ try:
           stopbits=serial.STOPBITS_ONE,\
           bytesize=serial.EIGHTBITS,\
           timeout=10)
-    
+
     print('...connected to: ' + ser.portstr)
-    
+
 except Exception as e:
     print('...serial connection error: ' + str(e))
     pytes_serial_log.error ('OPEN SERIAL - error handling message: ' + str(e))
     print('...program initialisation failed -- exit')
-    
+
     exit()
-    
+
 # --------------------------mqtt auto discovery (HA)----------------
 if MQTT_active =='true':  mqtt_discovery()
 
@@ -899,48 +931,48 @@ battery_events_log.info ('START - ' + version)
 
 while True:
     time.sleep(0.2)
-    if (time.time() - start_time) > reading_freq:                       
-        
-        loops_no       = loops_no +1                                    
-        
+    if (time.time() - start_time) > reading_freq:
+
+        loops_no       = loops_no +1
+
         now            = datetime.datetime.now()
-        TimeStamp      = now.strftime("%Y-%m-%d %H:%M:%S")       
+        TimeStamp      = now.strftime("%Y-%m-%d %H:%M:%S")
         print ('relay local time:', TimeStamp)
-        
+
         uptime = round((time.time()- up_time)/86400, 3)
         print ('serial uptime   :', uptime)
         start_time = time.time()
-        
+
         if errors == 'false':
             parsing_ser_time = time.time()
             parsing_serial()
             parsing_time = time.time() - parsing_ser_time
-            
+
         if cells_monitoring == 'true' and errors == 'false':
             check_cells_time = time.time()
             check_cells()
             parsing_time = parsing_time + (time.time() - check_cells_time)
-            
+
         if events_monitoring=='true' and errors == 'false':
             check_events()
-        
+
         if errors == 'false':
             json_serialize()
-            
+
         if errors == 'false' and SQL_active == 'true':
             maria_db()
-            
+
         if errors == 'false' and MQTT_active == 'true':
             mqtt_publish()
-            
+
         if errors != 'false' :
             errors_no = errors_no + 1
-            
+
         print ('...serial stat   :', 'loops:' , loops_no, 'errors:', errors_no, 'efficiency:', round((1-(errors_no/loops_no))*100, 2))
-        print ('...serial stat   :', 'bat events_no:' , bat_events_no, 'pwr events_no:', pwr_events_no, 'sys events_no:', sys_events_no) 
-        print ('...serial stat   :', 'parsing round-trip:' , round(parsing_time, 2)) 
+        print ('...serial stat   :', 'bat events_no:' , bat_events_no, 'pwr events_no:', pwr_events_no, 'sys events_no:', sys_events_no)
+        print ('...serial stat   :', 'parsing round-trip:' , round(parsing_time, 2))
         print ('------------------------------------------------------')
-        
+
         #clear variables
         pwr        = []
         bats       = []
