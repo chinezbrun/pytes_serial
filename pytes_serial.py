@@ -822,7 +822,10 @@ def parsing_bat(power):
                     elif l == 'Coulomb':
                         coulomb_idx = j
 
-                is_pylontech = soc_idx != -1
+                # Workaround for Pytes firmware missing SOC column in the header
+                if soc_idx == -1 and coulomb_idx != -1:
+                    soc_idx = coulomb_idx
+                    coulomb_idx = coulomb_idx + 1
 
             # All the other lines are cell data
             else:
@@ -847,11 +850,9 @@ def parsing_bat(power):
                     cell_data['curr_st']        = line[curr_st_idx]
                 if temp_st_idx != -1:
                     cell_data['temp_st']        = line[temp_st_idx]
-                if not is_pylontech and coulomb_idx != -1:
-                    cell_data['soc']            = int(line[coulomb_idx])                # %
-                if is_pylontech and soc_idx != -1:
+                if soc_idx != -1:
                     cell_data['soc']            = int(line[soc_idx][:-1])               # %
-                if is_pylontech and coulomb_idx != -1:
+                if coulomb_idx != -1:
                     cell_data['coulomb']        = int(line[coulomb_idx][:-4]) / 1000    # Ah
 
                 bat.append(cell_data)
