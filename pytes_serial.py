@@ -128,7 +128,7 @@ formatter = logging.Formatter('%(asctime)s| %(levelname)7s| %(message)s ',datefm
 def setup_logger(name, log_file, level=LOGGING_LEVEL_FILE):
 
     """To setup as many loggers as you want"""
-    handler = RotatingFileHandler(log_file, mode='a', maxBytes=LOGGING_FILE_MAX_SIZE*1000, backupCount=LOGGING_FILE_MAX_FILES, encoding=None, delay=0)
+    handler = RotatingFileHandler(log_file, mode='a', maxBytes=LOGGING_FILE_MAX_SIZE*1000, backupCount=LOGGING_FILE_MAX_FILES, encoding=None, delay=False)
     handler.setFormatter(formatter)
     logger = logging.getLogger(name)
     logger.setLevel(level)
@@ -510,7 +510,7 @@ def mqtt_discovery():
         config    = 1
         max_config= 0
         msg       = {}
-        MQTT_auth = None
+        MQTT_auth = None # type: publish.AuthParameter | None
 
         if len(MQTT_username) > 0:
             MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
@@ -671,7 +671,7 @@ def mqtt_discovery():
 
 def mqtt_publish():
     try:
-        MQTT_auth = None
+        MQTT_auth = None # type: publish.AuthParameter | None
         if len(MQTT_username) >0:
             MQTT_auth = { 'username': MQTT_username, 'password': MQTT_password }
         state_topic = "homeassistant/sensor/" + dev_name + "/state"
@@ -914,7 +914,7 @@ try:
           bytesize=serial.EIGHTBITS,\
           timeout=10)
 
-    print('...connected to: ' + ser.portstr)
+    if ser.portstr: print('...connected to: ' + ser.portstr)
 
 except Exception as e:
     print('...serial connection error: ' + str(e))
