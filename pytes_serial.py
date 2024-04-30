@@ -727,7 +727,7 @@ def mqtt_publish():
 
                     for key, value in cell.items():
                         # Do not publish these
-                        if key in ["cell"]:
+                        if key in ["power", "cell"]:
                             continue
 
                         state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/cells/" + cell_idx + "/" + key
@@ -891,6 +891,8 @@ def parsing_bat(power):
             else:
                 line = re.split(r'\s{2,}', line_str.strip()) # Each column is delimited by at least 2 spaces
                 cell_data = {} # type: dict[str, int|float|str]
+
+                cell_data['power']              = power
 
                 if cell_idx != -1:
                     cell_data['cell']           = int(line[cell_idx]) + 1
