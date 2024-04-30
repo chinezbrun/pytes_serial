@@ -21,7 +21,7 @@ powers                = int(config.get('battery_info', 'powers'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.7.0_20240427"
+sw_ver                = "PytesSerial v0.7.1_20240430"
 version               = sw_ver
 
 if reading_freq < 10  : reading_freq = 10
