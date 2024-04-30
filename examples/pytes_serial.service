@@ -1,14 +1,10 @@
-# Install on Linux with systemd (e.g. Raspberry Pi) with:
-#   sudo ln -sf $(realpath pytes_serial.service) /etc/systemd/system/
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable --now pytes_serial
-
 [Unit]
 Description=Pytes/Pylontech battery utility for writing to JSON/MQTT/MariaDB
 After=network.target
 
 [Service]
 Type=simple
+Environment="PYTHONUNBUFFERED=1"
 # Change these according to the intallation directory location
 #   Example with Python system install:
 WorkingDirectory=/home/pi/pytes_serial
