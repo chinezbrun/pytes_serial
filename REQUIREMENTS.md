@@ -1,8 +1,8 @@
 - Python >3.5 (tested 3.10)
-- Install required Python modules:
+- Install the required Python modules:
     - Option A - System install:
         ```
-        sudo python3 -m pip install -r reqitements.txt
+        sudo python3 -m pip install -r requirements.txt
         ```
     - Option B - Virtual environment:
         ```
