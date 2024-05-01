@@ -21,7 +21,7 @@ powers                = int(config.get('battery_info', 'powers'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.7.1_20240430"
+sw_ver                = "PytesSerial v0.7.2_20240501"
 version               = sw_ver
 
 if reading_freq < 10  : reading_freq = 10
@@ -628,7 +628,9 @@ def mqtt_discovery():
 
                         msg                  ={}
                         config               = config +1
-
+                        
+            print("...mqtt auto discovery")
+        
             # define individual cells sensors -- statistics
             names        =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
             ids          =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
@@ -940,15 +942,6 @@ def check_cells():
                         if item[each]>output[each][1]:
                             output[each][1] = item[each]
 
-                #stat = {'voltage_delta':round(output['voltage'][1] - output['voltage'][0],3),\
-                #              'voltage_min':min(output['voltage']),\
-                #              'voltage_max':max(output['voltage']),\
-                #              'temperature_delta': round(output['temperature'][1] - output['temperature'][0],3),\
-                #              'temperature_min':min(output['temperature']),\
-                #              'temperature_max':max(output['temperature'])\
-                #              }
-
-                #bat.append(stat)
                 stat = {
                     'power':power,
                     'voltage_delta':round(output['voltage'][1] - output['voltage'][0],3),
@@ -1010,15 +1003,18 @@ while True:
         start_time = time.time()
 
         if errors == 'false':
-            parsing_ser_time = time.time()
+            parsing_time = time.time()
             parsing_serial()
-            parsing_time = time.time() - parsing_ser_time
-
+            parsing_time = time.time() - parsing_time
+            #print(round(parsing_time, 2)) #debug
+            
         if cells_monitoring == 'true' and errors == 'false':
             check_cells_time = time.time()
             check_cells()
-            parsing_time = parsing_time + (time.time() - check_cells_time)
-
+            check_cells_time = (time.time() - check_cells_time)
+            parsing_time     = parsing_time + check_cells_time
+            #print(round(check_cells_time, 2)) #debug
+            
         if events_monitoring=='true' and errors == 'false':
             check_events()
 
@@ -1029,8 +1025,11 @@ while True:
             maria_db()
 
         if errors == 'false' and MQTT_active == 'true':
+            mqtt_publish_time = time.time()
             mqtt_publish()
-
+            mqtt_publish_time = (time.time() - mqtt_publish_time)
+            #print(round(mqtt_publish_time, 2)) #debug
+            
         if errors != 'false' :
             errors_no = errors_no + 1
 
