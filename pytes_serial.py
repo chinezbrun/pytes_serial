@@ -422,11 +422,13 @@ def json_serialize():
     global errors_no
     global errors
     global json_data
+    global json_data_old
     global bat_events_no
     global pwr_events_no
     global sys_events_no
     global bats
     try:
+        json_data_old = json_data
         json_data={'relay_local_time':TimeStamp,
                    'powers' : powers,
                    'voltage': sys_voltage,
@@ -681,6 +683,10 @@ def mqtt_publish():
             if key in ["devices", "cells_data"]:
                 continue
 
+            # If the value was published before, skip it
+            if json_data_old and value == json_data_old[key]:
+                continue
+
             state_topic = "pytes_serial/" + dev_name + "/" + key
             if isinstance(value, dict) or isinstance(value, list):
                 message = json.dumps(value)
@@ -695,6 +701,10 @@ def mqtt_publish():
             for key, value in device.items():
                 # Do not publish these
                 if key in ["power"]:
+                    continue
+
+                # If the value was published before, skip it
+                if json_data_old and value == json_data_old["devices"][device["power"] - 1][key]:
                     continue
 
                 state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/" + key
@@ -714,6 +724,10 @@ def mqtt_publish():
                     if key in ["power", "cells"]:
                         continue
 
+                    # If the value was published before, skip it
+                    if json_data_old and value == json_data_old["cells_data"][device["power"] - 1][key]:
+                        continue
+
                     state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/cells/" + key
                     if isinstance(value, dict) or isinstance(value, list):
                         message = json.dumps(value)
@@ -728,6 +742,10 @@ def mqtt_publish():
                     for key, value in cell.items():
                         # Do not publish these
                         if key in ["power", "cell"]:
+                            continue
+
+                        # If the value was published before, skip it
+                        if json_data_old and value == json_data_old["cells_data"][device["power"] - 1]["cells"][cell["cell"] - 1][key]:
                             continue
 
                         state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/cells/" + cell_idx + "/" + key
@@ -994,6 +1012,7 @@ print('...program initialisation completed starting main loop')
 
 pytes_serial_log.info ('START - ' + version)
 battery_events_log.info ('START - ' + version)
+json_data = {}
 
 while True:
     time.sleep(0.2)
