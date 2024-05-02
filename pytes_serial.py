@@ -708,7 +708,8 @@ def mqtt_publish():
                 # If the value was published before, skip it
                 if (
                     json_data_old and
-                    len(json_data["devices"]) == len(json_data_old["devices"]) and
+                    len(json_data["devices"]) == powers and
+                    len(json_data_old["devices"]) == powers and
                     value == json_data_old["devices"][device["power"] - 1][key]
                 ):
                     continue
@@ -733,8 +734,9 @@ def mqtt_publish():
                     # If the value was published before, skip it
                     if (
                         json_data_old and
-                        len(json_data["devices"]) == len(json_data_old["devices"]) and
-                        value == json_data_old["devices"][device["power"] - 1][key]
+                        len(json_data["cells_data"]) == powers and
+                        len(json_data_old["cells_data"]) == powers and
+                        value == json_data_old["cells_data"][device["power"] - 1][key]
                     ):
                         continue
 
@@ -757,9 +759,11 @@ def mqtt_publish():
                         # If the value was published before, skip it
                         if(
                             json_data_old and
-                            len(json_data["devices"]) == len(json_data_old["devices"]) and
-                            len(json_data["cells_data"][device["power"] - 1]["cells"]) == len(json_data_old["cells_data"][device["power"] - 1]["cells"]) and
-                            json_data_old and value == json_data_old["cells_data"][device["power"] - 1]["cells"][cell["cell"] - 1][key]
+                            len(json_data["cells_data"]) == powers and
+                            len(json_data_old["cells_data"]) == powers and
+                            len(json_data["cells_data"][device["power"] - 1]["cells"]) == cells and
+                            len(json_data_old["cells_data"][device["power"] - 1]["cells"]) == cells and
+                            value == json_data_old["cells_data"][device["power"] - 1]["cells"][cell["cell"] - 1][key]
                         ):
                             continue
 
