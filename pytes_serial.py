@@ -648,11 +648,11 @@ def mqtt_discovery():
                     state_topic          = "homeassistant/sensor/" + dev_name + "/" + msg["uniq_id"] + "/config"
                     msg ["name"]         = names[n]+"_"+str(power)
                     msg ["stat_t"]       = "pytes_serial/" + dev_name + "/" + str(power-1) + "/cells/" + ids[n]
-                    if dev_cla[n] != "None":
+                    if dev_cla[n] != None:
                         msg ["dev_cla"]  = dev_cla[n]
-                    if stat_cla[n] != "None":
+                    if stat_cla[n] != None:
                         msg ["stat_cla"]  = stat_cla[n]
-                    if unit_of_meas[n] != "None":
+                    if unit_of_meas[n] != None:
                         msg ["unit_of_meas"] = unit_of_meas[n]
 
                     msg ["val_tpl"]      = "{{ value_json.value }}"
@@ -706,7 +706,11 @@ def mqtt_publish():
                     continue
 
                 # If the value was published before, skip it
-                if json_data_old and value == json_data_old["devices"][device["power"] - 1][key]:
+                if (
+                    json_data_old and
+                    len(json_data["devices"]) == len(json_data_old["devices"]) and
+                    value == json_data_old["devices"][device["power"] - 1][key]
+                ):
                     continue
 
                 state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/" + key
@@ -727,7 +731,11 @@ def mqtt_publish():
                         continue
 
                     # If the value was published before, skip it
-                    if json_data_old and value == json_data_old["cells_data"][device["power"] - 1][key]:
+                    if (
+                        json_data_old and
+                        len(json_data["devices"]) == len(json_data_old["devices"]) and
+                        value == json_data_old["devices"][device["power"] - 1][key]
+                    ):
                         continue
 
                     state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/cells/" + key
@@ -747,7 +755,12 @@ def mqtt_publish():
                             continue
 
                         # If the value was published before, skip it
-                        if json_data_old and value == json_data_old["cells_data"][device["power"] - 1]["cells"][cell["cell"] - 1][key]:
+                        if(
+                            json_data_old and
+                            len(json_data["devices"]) == len(json_data_old["devices"]) and
+                            len(json_data["cells_data"][device["power"] - 1]["cells"]) == len(json_data_old["cells_data"][device["power"] - 1]["cells"]) and
+                            json_data_old and value == json_data_old["cells_data"][device["power"] - 1]["cells"][cell["cell"] - 1][key]
+                        ):
                             continue
 
                         state_topic = "pytes_serial/" + dev_name + "/" + device_idx + "/cells/" + cell_idx + "/" + key
