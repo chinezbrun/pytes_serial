@@ -163,3 +163,4 @@ cython_debug/
 pytes_serial.cfg
 pytes_serial.service
 pylon_status.json
+*.log.*
