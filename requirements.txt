@@ -1,12 +1,12 @@
 configparser==7.0.0
 DateTime==5.5
   pytz==2024.1
-  zope.interface==6.3
-    setuptools==69.5.1
+  zope.interface==6.4.post2
+    setuptools==70.3.0
 mysql-connector==2.2.9
-paho-mqtt==2.0.0
-pipdeptree==2.19.0
-  packaging==24.0
-  pip==24.0
+paho-mqtt==2.1.0
+pipdeptree==2.23.1
+  packaging==24.1
+  pip==24.1.2
 pyserial==3.5
 wheel==0.43.0
