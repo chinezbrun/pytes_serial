@@ -21,7 +21,7 @@ powers                = int(config.get('battery_info', 'powers'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.7.2_20240503"
+sw_ver                = "PytesSerial v0.7.3_20240721"
 version               = sw_ver
 
 if reading_freq < 10  : reading_freq = 10
@@ -84,8 +84,8 @@ power_events_list = {
 1024:["warning","0x400","*tbc*Temperature is normal"],
 2048:["warning","0x800","*tbc*Low temperature alarm"],
 4096:["warning","0x1000","*tbc*Under temperature alarm"],
-8192:["warning","0x2000","*tbc*Full charge"],
-16384:["warning","0x4000","*tbc*Normal power"],
+8192:["info","0x2000","Full charge"],
+16384:["info","0x4000","Normal power"],
 32768:["warning","0x8000","*tbc*Low power"],
 65536:["warning","0x10000","*tbc*Short circuit protection"],
 131072:["warning","0x20000","*tbc*Discharge overcurrent protection 2"],
@@ -790,20 +790,20 @@ def check_events ():
         for power in range (1, powers+1):
             cell_data_req = "false"
 
-            if pwr[power-1]['bat_events'] != 0 and (power_events_list[pwr[power-1]['bat_events']][0] == cells_details_level or cells_details_level =="info"):
-                print('...bat_event logged  :', str(power_events_list[pwr[power-1]['bat_events']][1]))
+            if power_events_list[pwr[power-1]['bat_events']][0] == cells_details_level or cells_details_level =="info":
+                print('...bat_event logged  :', str(power_events_list[pwr[power-1]['bat_events']][1]), str(power_events_list[pwr[power-1]['bat_events']][2]))
 
                 cell_data_req = "true"
                 bat_events_no = bat_events_no + 1
 
-            if pwr[power-1]['power_events'] != 0 and (power_events_list[pwr[power-1]['power_events']][0] == cells_details_level or cells_details_level =="info"):
-                print('...power_event logged:', str(power_events_list[pwr[power-1]['power_events']][1]))
+            if power_events_list[pwr[power-1]['power_events']][0] == cells_details_level or cells_details_level =="info":
+                print('...power_event logged:', str(power_events_list[pwr[power-1]['power_events']][1]), str(power_events_list[pwr[power-1]['power_events']][2]))
 
                 cell_data_req = "true"
                 pwr_events_no = pwr_events_no + 1
 
-            if pwr[power-1]['sys_events'] != 0 and (sys_events_list[pwr[power-1]['sys_events']][0] == cells_details_level or cells_details_level =="info"):
-                print('...sys_event logged  :', str(sys_events_list[pwr[power-1]['sys_events']][2]))
+            if sys_events_list[pwr[power-1]['sys_events']][0] == cells_details_level or cells_details_level =="info":
+                print('...sys_event logged  :', str(sys_events_list[pwr[power-1]['sys_events']][1]), str(sys_events_list[pwr[power-1]['sys_events']][2]))
 
                 cell_data_req = "true"
                 sys_events_no = sys_events_no + 1
@@ -823,7 +823,8 @@ def check_events ():
 {headers[8].capitalize(): <5}|\
 {headers[9].capitalize(): <10}|\
 {headers[10].capitalize(): <10}|\
-{headers[11].capitalize(): <10}')
+{headers[11].capitalize(): <10}|\
+{headers[12].capitalize(): <10}|')
 
                     print(headers_str)
                     battery_events_log.info (headers_str)
@@ -842,7 +843,8 @@ def check_events ():
 {cell_data[9]: <10}|\
 {cell_data[10]: <10}|\
 {cell_data[11]: <10}|\
-                ')
+{cell_data[12]: <10}|')
+                        
                         print(cell_data_str)
                         battery_events_log.info (cell_data_str)
 
