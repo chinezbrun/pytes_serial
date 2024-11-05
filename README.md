@@ -9,7 +9,7 @@ Configurable OPTIONS:
 - record data to MariaDB
 - send data via MQTT
 - events monitoring - when power_events, battery_events or system faults occured a log file is created with cells details - more details  [here](/docs/v0.5_changes_details.txt)
-- cell monitoring - read cells details for all batteries in bank
+- cell monitoring - read cells details for all batteries in bank. Two level of details can be selcted in config file.
 
 These options can be activated / dezactivated in configuration file (pytes_serial.cfg)
 
