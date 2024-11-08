@@ -4,13 +4,13 @@
 #---------------------------------------------------------------
 [serial]
 # serial_port                      # serial port used for RS232 connection with battery  i.e /dev/ttyUSB0 (raspberry) or COM3 windows
-# serial_baudrate                  # default = 115200
-# reading_freq                     # default = 10 -- reading freqvency [seconds] of the port
+# serial_baudrate                  # default =115200
+# reading_freq                     # default =10 -- reading freqvency [seconds] of the port
 
-#serial_port       = COM3
-serial_port       = /dev/ttyUSB0
-serial_baudrate   = 115200
-reading_freq      = 10
+#serial_port       =COM3
+serial_port       =/dev/ttyUSB0
+serial_baudrate   =115200
+reading_freq      =10
 
 #---------------------------------------------------------------
 [general] 
@@ -22,12 +22,14 @@ output_path       =
 
 #---------------------------------------------------------------
 [battery_info]
-# powers                           # default = 1     -- the number of batteries in the bank
-# dev_name                         # default = pytes -- HomeAssistant sensors will have this prefix, MQTT state topic will have this in the path "homeassistant/sensor/pytes/state", JSON file will have this prefix in the name. Change the name IF you have pylon or if you have second, third... banks i.e pytes_bank2. 
-# manufacturer                     # default = PYTES Energy Co.Ltd -- manufacturer name
-# model                            # default = E-BOX-48100R -- battery model
+# powers                           # default =1     -- the number of batteries in the bank
+# cells                            # default =16    -- numbers of cells/battery 16 for Pytes 15 for Pylontech
+# dev_name                         # default =pytes -- HomeAssistant sensors will have this prefix, MQTT state topic will have this in the path "homeassistant/sensor/pytes/state", JSON file will have this prefix in the name. Change the name IF you have pylon or if you have second, third... banks i.e pytes_bank2. 
+# manufacturer                     # default =PYTES Energy Co.Ltd -- manufacturer name
+# model                            # default =E-BOX-48100R -- battery model
 
 powers           =1
+cells            =16
 dev_name         =pytes
 manufacturer     =PYTES Energy Co.Ltd
 model            =E-BOX-48100R
@@ -64,29 +66,31 @@ MQTT_password   =
 
 #---------------------------------------------------------------
 [logging]
-# LOGGING_LEVEL_FILE               # default = logging.INFO -- set reported level in log file -- see docs https://docs.python.org/3/library/logging.html
-# LOGGING_FILE_MAX_SIZE            # default = 1000         -- log max file size in Kb 
-# LOGGING_FILE_MAX_FILES           # default = 1            -- max of backups for log files(rotating backup) 
+# LOGGING_LEVEL_FILE               # default =logging.INFO -- set reported level in log file -- see docs https://docs.python.org/3/library/logging.html
+# LOGGING_FILE_MAX_SIZE            # default =1000         -- log max file size in Kb 
+# LOGGING_FILE_MAX_FILES           # default =1            -- max of backups for log files(rotating backup) 
 
-#LOGGING_LEVEL         = logging.DEBUG
-LOGGING_LEVEL        = logging.INFO
-#LOGGING_LEVEL        = logging.WARNING 
-#LOGGING_LEVEL        = logging.ERROR   
-LOGGING_FILE_MAX_SIZE = 5000           
-LOGGING_FILE_MAX_FILES = 1
+#LOGGING_LEVEL         =logging.DEBUG
+LOGGING_LEVEL        =logging.INFO
+#LOGGING_LEVEL        =logging.WARNING 
+#LOGGING_LEVEL        =logging.ERROR   
+LOGGING_FILE_MAX_SIZE =5000           
+LOGGING_FILE_MAX_FILES =1
 
 #---------------------------------------------------------------
-[events]
-#cells_monitoring                  # default = false   -- set 'true' to enable cells monitoring via MQTT, sensors in HA will be created for each cell 
-#events_monitoring                 # default = false   -- set 'true' to enable events monitoring
-#cells                             # default = 16      -- numbers of cells/battery 16 for Pytes 15 for Pylontech  
-#cells_details                     # default = true    -- set 'false' to disable cells details log in case of events 
-#cells_details_level               # default = warning -- set to 'info' to have cells details for all events [recomanded only for debug purpose - high amount of data logged]
+[events_monitoring]
+#events_monitoring                 # default =false   -- set 'true' to enable events monitoring
+#cells_details                     # default =true    -- set 'false' to disable cells details log in case of events 
+#monitoring_level                  # default =warning -- set to 'info' to have cells details for all events [recomanded only for debug purpose - high amount of data logged]
 
-cells_monitoring      = false 
-events_monitoring     = false
-cells                 = 16
-cells_details         = true
-cells_details_level   = warning
+events_monitoring     =false
+cells_details         =true
+monitoring_level      =warning
 
+#---------------------------------------------------------------
+[cells_monitoring]
+#cells_monitoring                  # default =false   -- set 'true' to enable cells monitoring via MQTT, sensors in HA will be created for each cell 
+#monitoring_level                  # default =medium  -- set to 'low' [shows:voltage] set to 'medium' [shows: voltage, temperature, status and statistics], set to 'high' shows all cells parameters [not recomanded for more than 4 batteries in bank due to high amount of data]
 
+cells_monitoring      =true 
+monitoring_level      =medium
