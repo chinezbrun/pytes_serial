@@ -9,7 +9,7 @@ Configurable OPTIONS:
 - record data to MariaDB
 - send data via MQTT
 - events monitoring - when power_events, battery_events or system faults occured a log file is created with cells details 
-- cell monitoring - read cells details for all batteries in bank. Two levels of details can be selected in config file.
+- cell monitoring - read cells details for all batteries in bank. Three levels of details can be selected in config file.
   more details/explanation can be found [here](/docs/configuration_details.txt)
   
 These options can be activated / dezactivated in configuration file (pytes_serial.cfg)
@@ -48,5 +48,3 @@ Serial cable must be connected to battery 1 (master).
 A lighter version written in Micropython for ESP32 is available here:[pytes_esp](https://github.com/chinezbrun/pytes_esp)
 
 enjoy
-
-Thanks to [valimircea-popescu](https://github.com/valimircea-popescu) for conducting the testing on Pylontech batteries.
