@@ -8,9 +8,10 @@ Program reads serial port with a specific freqvency, parsing the data and saving
 Configurable OPTIONS:
 - record data to MariaDB
 - send data via MQTT
-- events monitoring - when power_events, battery_events or system faults occured a log file is created with cells details - more details  [here](/docs/v0.5_changes_details.txt)
-- cell monitoring - read cells details for all batteries in bank. Two level of details can be selcted in config file.
-
+- events monitoring - when power_events, battery_events or system faults occured a log file is created with cells details 
+- cell monitoring - read cells details for all batteries in bank. Two levels of details can be selected in config file.
+  more details/explanation can be found [here](/docs/configuration_details.txt)
+  
 These options can be activated / dezactivated in configuration file (pytes_serial.cfg)
 
 When MQTT transmition is activated:
@@ -19,8 +20,7 @@ When MQTT transmition is activated:
    The battery number is embeded at the end of each sensor (i.e current_1, current_2...).
 
    When cell monitoring is activated an additional device will be created in Home Assistant with sufix "_cells" with all associated sensors. The battery and cell number is embeded at the end of each sensor ( i.e. voltage_102 means voltage for battery 1 cell 2).
-
-   As of v0.7.0 basic statistics was implemented too. Therefore, additional sensors will be available for min, max and delta for cells voltage and temperature. 
+   Basic statistics is implemented too. Therefore, additional sensors will be available for min, max and delta for cells voltage and temperature. 
    (i.e. pytes_cells_voltage_max_1 means max cells voltage for battery 1)  
   
   If more sensors will be needed, they can be added manually as per Home Assistant documentation [MQTT sensor](https://www.home-assistant.io/integrations/sensor.mqtt/) and the example in docs folder [here](/docs/home_assistant_add_sensor.txt).
