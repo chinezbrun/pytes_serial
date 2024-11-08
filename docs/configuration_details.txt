@@ -1,0 +1,35 @@
+config file sections explained
+
+[logging]
+Give you the possibility to select level of logging from DEBUG to ERROR. 
+According python documentation the criticality is in this order: DEBUG > INFO > WARNING > ERROR. 
+Selecting logging.INFO will show all logs with INFO and so on.
+
+Two logs files are created:
+pytes_serial.log   -- here script events are logged
+battery_events.log -- here event monitoring are logged
+The size of the logs and the numbers of backups is configurable too.
+
+[events_monitoring] 
+This section give you the possibility to activate / deactivate / configure 'events monitoring' feature. 
+There are 3 types of events that are reported after "PWR" command: power_events, bat_events and sys_faults.
+Usualy they are zero. Once one event occur an event number is reported.
+Events are generated and reported by BMS (pylon, pytes) and can be normal events [i.e IDLE, CHARGE, DISCHARGE] or important one [i.e HV - high voltage, LV - low voltage].
+I classified all these events in two categories, based on degree of criticability (personal experience) without any validation from pylon and pytes manufacturer (they simply refused to provide me additional documentation).
+For example the daily / normal ones are INFO and the rest are WARNING.
+
+if events_monitoring = true -- on each event different than zero battery details are logged with monitoring_level criteria
+if events_monitoring = true and cells_details = true --on each event different than zero cells details are logged, with monitoring_level criteria, on top of battery details.
+if monitoring_level  = INFO    --will log all events includes the normal one (usually used for debug purpose)
+if monitoring_level  = WARNING --will log only the important one
+
+
+[cells_monitoring]
+This section give you the possibility to activate / deactivate / configure 'cells monitoring' feature.
+The big difference between 'cells monitoring' and 'events monitoring' is that in 'cells monitoring' the cell parameters are continuously monitored while
+in 'events monitoring' they are recorded ONLY when an event occurs.
+
+if cells_monitoring = true -- cells monitoring is activated, sensors will be created for cells parameters in Home Assistant and cells with be monitored with defined frequency.
+if cells_monitoring = true and monitoring_level = low  --sensors only for 'voltage' will be created
+if cells_monitoring = true and monitoring_level = medium --sensors for 'voltage', temperature, voltage_status and statistics will be created
+if cells_monitoring = true and monitoring_level = high --sensors for all parameters will be created [attention with high amount of data send, recorded]
