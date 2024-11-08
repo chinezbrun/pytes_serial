@@ -18,10 +18,11 @@ serial_baudrate       = int(config.get('serial', 'serial_baudrate'))
 reading_freq          = int(config.get('serial', 'reading_freq'))
 output_path           = config.get('general', 'output_path')
 powers                = int(config.get('battery_info', 'powers'))
+cells                  = int(config.get('battery_info', 'cells'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.7.4_20240814"
+sw_ver                = "PytesSerial v0.8.0_20241107"
 version               = sw_ver
 
 if reading_freq < 10  : reading_freq = 10
@@ -49,11 +50,12 @@ LOGGING_LEVEL_FILE     = (log_level_info[LOGGING_LEVEL])
 LOGGING_FILE_MAX_SIZE  = int(config.get('logging', 'LOGGING_FILE_MAX_SIZE'))
 LOGGING_FILE_MAX_FILES = int(config.get('logging', 'LOGGING_FILE_MAX_FILES'))
 
-cells_monitoring       = config.get('events', 'cells_monitoring')
-events_monitoring      = config.get('events', 'events_monitoring')
-cells                  = int(config.get('events', 'cells'))
-cells_details          = config.get('events', 'cells_details')
-cells_details_level    = config.get('events', 'cells_details_level')
+cells_monitoring       = config.get('cells_monitoring', 'cells_monitoring')
+cells_mon_level        = config.get('cells_monitoring', 'monitoring_level')
+
+events_monitoring      = config.get('events_monitoring', 'events_monitoring')
+events_mon_level       = config.get('events_monitoring', 'monitoring_level')
+cells_details          = config.get('events_monitoring', 'cells_details')
 
 start_time            = time.time()                         # init time
 up_time               = time.time()                         # used to calculate uptime
@@ -394,40 +396,46 @@ def parsing_serial():
         return
 
 def statistics():
-    global sys_voltage
-    global sys_current
-    global sys_soc
-    global sys_temp
-    global sys_basic_st
-    sys_voltage  = 0
-    sys_current  = 0
-    sys_soc      = 0
-    sys_temp     = 0
-    sys_basic_st = ""
+    try:
+        global sys_voltage
+        global sys_current
+        global sys_soc
+        global sys_temp
+        global sys_basic_st
+        sys_voltage  = 0
+        sys_current  = 0
+        sys_soc      = 0
+        sys_temp     = 0
+        sys_basic_st = ""
 
-    for power in range (1, powers+1):
-        sys_voltage       = sys_voltage + pwr[power-1]['voltage']             # voltage will be the average of all batteries
-        sys_current       = round((sys_current + pwr[power-1]['current']),1)  # current will be sum of all banks
-        sys_soc           = sys_soc + pwr[power-1]['soc']                     # soc will be the average of all batteries
-        sys_temp          = sys_temp + pwr[power-1]['temperature']            # temperature will be the average of all batteries
+        for power in range (1, powers+1):
+            sys_voltage       = sys_voltage + pwr[power-1]['voltage']             # voltage will be the average of all batteries
+            sys_current       = round((sys_current + pwr[power-1]['current']),1)  # current will be sum of all banks
+            sys_soc           = sys_soc + pwr[power-1]['soc']                     # soc will be the average of all batteries
+            sys_temp          = sys_temp + pwr[power-1]['temperature']            # temperature will be the average of all batteries
 
-    sys_voltage  = round((sys_voltage / powers), 1)
-    sys_soc      = int(sys_soc / powers)
-    sys_basic_st = pwr[0]['basic_st']                                         # status will be the master status
-    sys_temp     = round((sys_temp / powers), 1)
+        sys_voltage  = round((sys_voltage / powers), 1)
+        sys_soc      = int(sys_soc / powers)
+        sys_basic_st = pwr[0]['basic_st']                                         # status will be the master status
+        sys_temp     = round((sys_temp / powers), 1)
+        
+    except Exception as e:
+        errors = 'true'
+        print('...json serialization error: ' + str(e))
 
 def json_serialize():
-    global parsing_time
-    global loops_no
-    global errors_no
-    global errors
-    global json_data
-    global json_data_old
-    global bat_events_no
-    global pwr_events_no
-    global sys_events_no
-    global bats
     try:
+        global parsing_time
+        global loops_no
+        global errors_no
+        global errors
+        global json_data
+        global json_data_old
+        global bat_events_no
+        global pwr_events_no
+        global sys_events_no
+        global bats
+
         json_data_old = json_data
         json_data={'relay_local_time':TimeStamp,
                    'powers' : powers,
@@ -591,13 +599,28 @@ def mqtt_discovery():
 
         # define individual cells sensors
         if cells_monitoring == 'true':
-
-            names        =["voltage",       "temperature",  "soc",          "status",   "volt_st",  "curr_st",  "temp_st"]
-            ids          =["voltage",       "temperature",  "soc",          "basic_st", "volt_st",  "curr_st",  "temp_st"]
-            dev_cla      =["voltage",       "temperature",  "battery",      None,       None,       None,       None]
-            stat_cla     =["measurement",   "measurement",  "measurement",  None,       None,       None,       None]
-            unit_of_meas =["V",             "°C",           "%",            None,       None,       None,       None]
-
+            # individual sensors based on monitoring level
+            if cells_mon_level == 'high':
+                names        =["voltage",       "temperature",  "soc",          "status",   "volt_st",  "curr_st",  "temp_st"]
+                ids          =["voltage",       "temperature",  "soc",          "basic_st", "volt_st",  "curr_st",  "temp_st"]
+                dev_cla      =["voltage",       "temperature",  "battery",      None,       None,       None,       None]
+                stat_cla     =["measurement",   "measurement",  "measurement",  None,       None,       None,       None]
+                unit_of_meas =["V",             "°C",           "%",            None,       None,       None,       None]
+                
+            elif cells_mon_level == 'medium':
+                names        =["voltage",       "temperature",  "volt_st"]
+                ids          =["voltage",       "temperature",  "volt_st"]
+                dev_cla      =["voltage",       "temperature",       None]
+                stat_cla     =["measurement",   "measurement",       None]
+                unit_of_meas =["V",             "°C",                None]
+                
+            else:
+                names        =["voltage"]
+                ids          =["voltage"]
+                dev_cla      =["voltage"]
+                stat_cla     =["measurement"]
+                unit_of_meas =["V"]            
+            
             max_config   = max_config + powers*len(ids)*cells
 
             for power in range (1, powers+1):
@@ -631,41 +654,44 @@ def mqtt_discovery():
                         msg                  ={}
                         config               = config +1
                         
-            print("...mqtt auto discovery")
-        
-            # define individual cells sensors -- statistics
-            names        =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
-            ids          =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
-            dev_cla      =["voltage",       "voltage",      "voltage",      "temperature",          "temperature",      "temperature"]
-            stat_cla     =["measurement",   "measurement",  "measurement",  "measurement",          "measurement",      "measurement"]
-            unit_of_meas =["V",             "V",            "V",            "°C",                   "°C",               "°C"]
+            # only for medium and high monitoring level
+            if cells_mon_level == 'medium' or cells_mon_level == 'high':
+                
+                print("...mqtt auto discovery")
+                
+                # define individual cells sensors -- statistics
+                names        =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
+                ids          =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
+                dev_cla      =["voltage",       "voltage",      "voltage",      "temperature",          "temperature",      "temperature"]
+                stat_cla     =["measurement",   "measurement",  "measurement",  "measurement",          "measurement",      "measurement"]
+                unit_of_meas =["V",             "V",            "V",            "°C",                   "°C",               "°C"]
 
-            max_config   = max_config + powers*len(ids)
+                max_config   = max_config + powers*len(ids)
 
-            for power in range (1, powers+1):
-                for n in range(len(ids)):
-                    msg ["uniq_id"]      = dev_name + "_" + ids[n] + "_" + str(power)
-                    state_topic          = "homeassistant/sensor/" + dev_name + "/" + msg["uniq_id"] + "/config"
-                    msg ["name"]         = names[n]+"_"+str(power)
-                    msg ["stat_t"]       = "pytes_serial/" + dev_name + "/" + str(power-1) + "/cells/" + ids[n]
-                    if dev_cla[n] != None:
-                        msg ["dev_cla"]  = dev_cla[n]
-                    if stat_cla[n] != None:
-                        msg ["stat_cla"]  = stat_cla[n]
-                    if unit_of_meas[n] != None:
-                        msg ["unit_of_meas"] = unit_of_meas[n]
+                for power in range (1, powers+1):
+                    for n in range(len(ids)):
+                        msg ["uniq_id"]      = dev_name + "_" + ids[n] + "_" + str(power)
+                        state_topic          = "homeassistant/sensor/" + dev_name + "/" + msg["uniq_id"] + "/config"
+                        msg ["name"]         = names[n]+"_"+str(power)
+                        msg ["stat_t"]       = "pytes_serial/" + dev_name + "/" + str(power-1) + "/cells/" + ids[n]
+                        if dev_cla[n] != None:
+                            msg ["dev_cla"]  = dev_cla[n]
+                        if stat_cla[n] != None:
+                            msg ["stat_cla"]  = stat_cla[n]
+                        if unit_of_meas[n] != None:
+                            msg ["unit_of_meas"] = unit_of_meas[n]
 
-                    msg ["val_tpl"]      = "{{ value_json.value }}"
-                    msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
-                    message              = json.dumps(msg)
+                        msg ["val_tpl"]      = "{{ value_json.value }}"
+                        msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
+                        message              = json.dumps(msg)
 
-                    publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
+                        publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
-                    b = "...mqtt auto discovery - statistics sensors:" + str(round(config/max_config *100)) +" %"
-                    print (b, end="\r")
+                        b = "...mqtt auto discovery - statistics sensors:" + str(round(config/max_config *100)) +" %"
+                        print (b, end="\r")
 
-                    msg                  ={}
-                    config               = config +1
+                        msg                  ={}
+                        config               = config +1
 
         print("...mqtt auto discovery")
 
@@ -726,6 +752,7 @@ def mqtt_publish():
                 device_idx = str(device["power"] - 1)
 
                 # Publish cell statistics
+                #low
                 for key, value in device.items():
                     # Do not publish these
                     if key in ["power", "cells"]:
@@ -781,28 +808,28 @@ def mqtt_publish():
         pytes_serial_log.warning ('MQTT PUBLISH - error handling message: ' + str(e))
 
 def check_events ():
-    global pwr
-    global bat_events_no
-    global pwr_events_no
-    global sys_events_no
-
     try:
+        global pwr
+        global bat_events_no
+        global pwr_events_no
+        global sys_events_no
+
         for power in range (1, powers+1):
             cell_data_req = "false"
 
-            if power_events_list[pwr[power-1]['bat_events']][0] == cells_details_level or cells_details_level =="info":
+            if power_events_list[pwr[power-1]['bat_events']][0] == events_mon_level or events_mon_level =="info":
                 print('...bat_event logged  :', str(power_events_list[pwr[power-1]['bat_events']][1]), str(power_events_list[pwr[power-1]['bat_events']][2]))
 
                 cell_data_req = "true"
                 bat_events_no = bat_events_no + 1
 
-            if power_events_list[pwr[power-1]['power_events']][0] == cells_details_level or cells_details_level =="info":
+            if power_events_list[pwr[power-1]['power_events']][0] == events_mon_level or events_mon_level =="info":
                 print('...power_event logged:', str(power_events_list[pwr[power-1]['power_events']][1]), str(power_events_list[pwr[power-1]['power_events']][2]))
 
                 cell_data_req = "true"
                 pwr_events_no = pwr_events_no + 1
 
-            if sys_events_list[pwr[power-1]['sys_events']][0] == cells_details_level or cells_details_level =="info":
+            if sys_events_list[pwr[power-1]['sys_events']][0] == events_mon_level or events_mon_level =="info":
                 print('...sys_event logged  :', str(sys_events_list[pwr[power-1]['sys_events']][1]), str(sys_events_list[pwr[power-1]['sys_events']][2]))
 
                 cell_data_req = "true"
@@ -859,11 +886,11 @@ def check_events ():
         pytes_serial_log.warning ('CHECK EVENTS - error handling message: ' + str(e))
 
 def parsing_bat(power):
-    global line_str_array
-    global bat
-    bat = []
-
     try:
+        global line_str_array
+        global bat
+        bat = []
+        
         req  = ('bat '+ str(power))
         size = 1000
         write_return = serial_write(req,size)
@@ -927,6 +954,7 @@ def parsing_bat(power):
                     coulomb_idx = coulomb_idx + 1
 
             # All the other lines are cell data
+            # Parameters are selected based on monitoring level
             else:
                 line = re.split(r'\s{2,}', line_str.strip()) # Each column is delimited by at least 2 spaces
                 cell_data = {} # type: dict[str, int|float|str]
@@ -937,58 +965,69 @@ def parsing_bat(power):
                     cell_data['cell']           = int(line[cell_idx]) + 1
                 if volt_idx != -1:
                     cell_data['voltage']        = int(line[volt_idx]) / 1000            # V
-                if curr_idx != -1:
+                if cells_mon_level=='high' and curr_idx != -1:
                     cell_data['current']        = int(line[curr_idx]) / 1000            # A
-                if temp_idx != -1:
+                if (cells_mon_level=='medium' or cells_mon_level=='high') and temp_idx != -1:
                     cell_data['temperature']    = int(line[temp_idx]) / 1000            # deg C
-                if base_st_idx != -1:
+                if cells_mon_level=='high' and base_st_idx != -1:
                     cell_data['basic_st']       = line[base_st_idx]
-                if volt_st_idx != -1:
+                if (cells_mon_level=='medium' or cells_mon_level=='high') and volt_st_idx != -1:
                     cell_data['volt_st']        = line[volt_st_idx]
-                if curr_st_idx != -1:
+                if cells_mon_level=='high' and curr_st_idx != -1:
                     cell_data['curr_st']        = line[curr_st_idx]
-                if temp_st_idx != -1:
+                if cells_mon_level=='high' and temp_st_idx != -1:
                     cell_data['temp_st']        = line[temp_st_idx]
-                if soc_idx != -1:
+                if cells_mon_level=='high' and soc_idx != -1:
                     cell_data['soc']            = int(line[soc_idx][:-1])               # %
-                if coulomb_idx != -1:
+                if cells_mon_level=='high' and coulomb_idx != -1:
                     cell_data['coulomb']        = int(line[coulomb_idx][:-4]) / 1000    # Ah
 
                 bat.append(cell_data)
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
         return "true"
 
     except Exception as e:
         pytes_serial_log.info ('PARSING BAT - error handling message: ' + str(e))
 
 def check_cells():
-    global bats
     try:
+        global bats
+        
         for power in range (1, powers+1):
             if parsing_bat(power)=="true":
+                
+                # statistics availailable only for medium and high monitoring level
+                if cells_mon_level=='medium' or cells_mon_level=='high':
+                   # statistics -- calculate min,mix of cells data of each power
+                    output = {"voltage" : [float('inf'),float('-inf')],
+                              "temperature" : [float('inf'),float('-inf')]
+                              }
 
-               # statistics -- calculate min,mix of cells data of each power
-                output = {"voltage" : [float('inf'),float('-inf')],
-                          "temperature" : [float('inf'),float('-inf')]
-                          }
-                for item in bat:
-                    for each in output.keys():
-                        if item[each]<output[each][0]:
-                            output[each][0] = item[each]
+                    for item in bat:
+                        for each in output.keys():
+                            if item[each]<output[each][0]:
+                                output[each][0] = item[each]
 
-                        if item[each]>output[each][1]:
-                            output[each][1] = item[each]
+                            if item[each]>output[each][1]:
+                                output[each][1] = item[each]
 
-                stat = {
-                    'power':power,
-                    'voltage_delta':round(output['voltage'][1] - output['voltage'][0],3),
-                    'voltage_min':output['voltage'][0],
-                    'voltage_max':output['voltage'][1],
-                    'temperature_delta': round(output['temperature'][1] - output['temperature'][0],3),
-                    'temperature_min':output['temperature'][0],
-                    'temperature_max':output['temperature'][1],
-                    'cells':bat
-                }
+                    stat = {
+                        'power':power,
+                        'voltage_delta':round(output['voltage'][1] - output['voltage'][0],3),
+                        'voltage_min':output['voltage'][0],
+                        'voltage_max':output['voltage'][1],
+                        'temperature_delta': round(output['temperature'][1] - output['temperature'][0],3),
+                        'temperature_min':output['temperature'][0],
+                        'temperature_max':output['temperature'][1],
+                        'cells':bat
+                    }
+                    
+                else:
+                    # statistics not available for 'low' level monitoring 
+                    stat = {
+                        'power':power,
+                        'cells':bat
+                    }
 
                 bats.append(stat)
 
