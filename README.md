@@ -39,7 +39,7 @@ Serial cable must be connected to battery 1 (master).
     - MQTT broker must be installed (MQTT documentation is out of this project scope)
     - if you use Home Assistant, make sure that MQTT auto discovery is set true and sensors will be auto discovered when program will start
 
-3. reaname pyteys_serial.cfg.example in pyteys_serial.cfg and configure it as per your needs (do not remark or delete lines in sections just do the configuration)
+3. reaname pytes_serial.cfg.example in pytes_serial.cfg and configure it as per your needs (do not remark or delete lines in sections just do the configuration)
 4. make sure that all required pyton modules are installed see [requirements](/REQUIREMENTS.md)
 5. go to the folder where the program is located (i.e cd /home/pi/Documents/pytes)
 6. execute pytes_serial.sh to have a separate terminal instance (works for Linux/Raspberry) or python3 pytes_serial.py directly from console.
