@@ -22,7 +22,7 @@ cells                  = int(config.get('battery_info', 'cells'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.8.0_20241107"
+sw_ver                = "PytesSerial v0.9.0_20251018"
 version               = sw_ver
 
 if reading_freq < 10  : reading_freq = 10
@@ -123,6 +123,80 @@ sys_events_list = {
 2048:["warning","0x800","Discharge MOS FAIL"]
 }
 
+# -------------------- optional event config override --------------------
+# If "events_config.json" exists next to this script, update/extend the built-in
+# event mappings. If the file is missing or invalid, keep defaults (backward compatible).
+
+events_config_file = 'events_config.json'
+
+try:
+    with open(events_config_file, 'r', encoding='utf-8') as f:
+        cfg = json.load(f)
+
+    # Update power events
+    if isinstance(cfg, dict) and 'power_events' in cfg:
+        for k, v in cfg['power_events'].items():
+            try:
+                code     = int(k)  # JSON keys are strings
+                level    = v.get('level', power_events_list.get(code, ['info'])[0])
+                text     = v.get('text',  power_events_list.get(code, ['', '', ''])[2])
+                hex_code = v.get('hex_code', hex(code))
+                power_events_list[code] = [level, hex_code, text]
+            except Exception as e:
+                print('power_events config error:', e)
+
+    # Update system events
+    if isinstance(cfg, dict) and 'sys_events' in cfg:
+        for k, v in cfg['sys_events'].items():
+            try:
+                code     = int(k)
+                level    = v.get('level', sys_events_list.get(code, ['info'])[0])
+                text     = v.get('text',  sys_events_list.get(code, ['', '', ''])[2])
+                hex_code = v.get('hex_code', hex(code))
+                sys_events_list[code] = [level, hex_code, text]
+            except Exception as e:
+                print('sys_events config error:', e)
+
+    print('Loaded event config from', events_config_file)
+
+except FileNotFoundError:
+    print('No event config file found — using built-in defaults.')
+except Exception as e:
+    print('Failed to load event config:', e)
+
+# -------------------- auto-generate default events_config.json --------------------
+# If file does not exist, create it from current power_events_list and sys_events_list.
+
+try:
+    # Create only if it doesn't already exist (exclusive create mode)
+    _events_cfg = {"power_events": {}, "sys_events": {}}
+
+    for code, v in power_events_list.items():
+        _events_cfg["power_events"][str(code)] = {
+            "level": v[0],
+            "hex_code": v[1],
+            "text": v[2],
+        }
+
+    for code, v in sys_events_list.items():
+        _events_cfg["sys_events"][str(code)] = {
+            "level": v[0],
+            "hex_code": v[1],
+            "text": v[2],
+        }
+
+    with open(events_config_file, "x", encoding="utf-8") as _f:
+        json.dump(_events_cfg, _f, indent=2)
+
+    print("Generated default", events_config_file)
+
+except FileExistsError:
+    # File already exists — do nothing
+    pass
+except Exception as e:
+    print("Failed to auto-generate events_config.json:", e)
+    
+# -------------------------------------------------------------------------------
 print("software version:",version)
 
 # ------------------------logging definiton ----------------------------
@@ -807,83 +881,106 @@ def mqtt_publish():
         print ('...mqtt publish error: ' + str(e))
         pytes_serial_log.warning ('MQTT PUBLISH - error handling message: ' + str(e))
 
-def check_events ():
+def check_events():
     try:
+        # Globals used/updated by this routine
         global pwr
         global bat_events_no
         global pwr_events_no
         global sys_events_no
 
-        for power in range (1, powers+1):
-            cell_data_req = "false"
+        # Iterate through all power packs/batteries
+        for power in range(1, powers + 1):
+            cell_data_req = "false"  # set to "true" if we need to read and print cell details
 
-            if power_events_list[pwr[power-1]['bat_events']][0] == events_mon_level or events_mon_level =="info":
-                print('...bat_event logged  :', str(power_events_list[pwr[power-1]['bat_events']][1]), str(power_events_list[pwr[power-1]['bat_events']][2]))
-
+            # --- Battery events filter (level-based) ---
+            if power_events_list[pwr[power-1]['bat_events']][0] == events_mon_level or events_mon_level == "info":
+                print('...bat_event logged  :',
+                      str(power_events_list[pwr[power-1]['bat_events']][1]),
+                      str(power_events_list[pwr[power-1]['bat_events']][2]))
                 cell_data_req = "true"
-                bat_events_no = bat_events_no + 1
+                bat_events_no += 1
 
-            if power_events_list[pwr[power-1]['power_events']][0] == events_mon_level or events_mon_level =="info":
-                print('...power_event logged:', str(power_events_list[pwr[power-1]['power_events']][1]), str(power_events_list[pwr[power-1]['power_events']][2]))
-
+            # --- Power events filter (level-based) ---
+            if power_events_list[pwr[power-1]['power_events']][0] == events_mon_level or events_mon_level == "info":
+                print('...power_event logged:',
+                      str(power_events_list[pwr[power-1]['power_events']][1]),
+                      str(power_events_list[pwr[power-1]['power_events']][2]))
                 cell_data_req = "true"
-                pwr_events_no = pwr_events_no + 1
+                pwr_events_no += 1
 
-            if sys_events_list[pwr[power-1]['sys_events']][0] == events_mon_level or events_mon_level =="info":
-                print('...sys_event logged  :', str(sys_events_list[pwr[power-1]['sys_events']][1]), str(sys_events_list[pwr[power-1]['sys_events']][2]))
-
+            # --- System events filter (level-based) ---
+            if sys_events_list[pwr[power-1]['sys_events']][0] == events_mon_level or events_mon_level == "info":
+                print('...sys_event logged  :',
+                      str(sys_events_list[pwr[power-1]['sys_events']][1]),
+                      str(sys_events_list[pwr[power-1]['sys_events']][2]))
                 cell_data_req = "true"
-                sys_events_no = sys_events_no + 1
+                sys_events_no += 1
 
-            if cell_data_req == "true" and cells_details =='true':
-                if parsing_bat(power)=="true":
+            # If we decided to show cell details and the feature is enabled
+            if cell_data_req == "true" and cells_details == 'true':
+                # Try to parse cell data for this power pack
+                if parsing_bat(power) == "true" and bat:
+                    print("------------------------------------------------------x")
+
+                    # Build the header list from the first cell record + 3 event columns
+                    headers = list(bat[0].keys()) + ['bat_events', 'pwr_events', 'sys_events']
+                    print(headers)  # debug print, same as before
+
+                    # Suggested minimum widths per known column (used as a floor)
+                    width_map = {
+                        'power': 5, 'cell': 4, 'voltage': 8, 'temperature': 11,
+                        'volt_st': 9, 'current': 8, 'basic_st': 8, 'curr_st': 8,
+                        'temp_st': 8, 'soc': 5, 'coulomb': 8,
+                        'bat_events': 10, 'pwr_events': 10, 'sys_events': 10
+                    }
+
+                    # Build all data rows in the exact same order as headers
+                    rows = []
+                    for n in range(len(bat)):  # use actual length of 'bat'
+                        row = [str(bat[n].get(k, "")) for k in headers[:-3]] + [
+                            power_events_list[pwr[power-1]['bat_events']][1],
+                            power_events_list[pwr[power-1]['power_events']][1],
+                            sys_events_list[pwr[power-1]['sys_events']][1]
+                        ]
+                        rows.append(row)
+
+                    # Auto-calculate column widths: max of (header, data, width_map floor)
+                    widths = []
+                    for i, h in enumerate(headers):
+                        base_w = width_map.get(h, 8)
+                        max_data_len = max((len(r[i]) for r in rows), default=0)
+                        widths.append(max(len(h), base_w, max_data_len))
+
+                    # Build a printf-style format string with left alignment and "|" separators
+                    fmt = "|".join("{:<" + str(w) + "}" for w in widths) + "|"
+
+                    # Print header (Excel-friendly: same separator)
+                    header_line = fmt.format(*(h.capitalize() for h in headers))
+                    print(header_line)
+                    battery_events_log.info(header_line)
+
+                    # Optional: visual separator (nice in console/logs)
+                    sep = "+".join("-" * w for w in widths) + "+"
+                    print(sep)
+                    battery_events_log.info(sep)
+
+                    # Print all data rows
+                    for r in rows:
+                        line = fmt.format(*r)
+                        print(line)
+                        battery_events_log.info(line)
+
                     print("------------------------------------------------------")
-                    headers     = list(bat[0].keys()) + ['bat_events', 'pwr_events', 'sys_events']
-                    headers_str = (f'{headers[0].capitalize(): <5}|\
-{headers[1].capitalize(): <4}|\
-{headers[2].capitalize(): <8}|\
-{headers[3].capitalize(): <11}|\
-{headers[4].capitalize(): <9}|\
-{headers[5].capitalize(): <8}|\
-{headers[6].capitalize(): <8}|\
-{headers[7].capitalize(): <8}|\
-{headers[8].capitalize(): <5}|\
-{headers[9].capitalize(): <10}|\
-{headers[10].capitalize(): <10}|\
-{headers[11].capitalize(): <10}|\
-{headers[12].capitalize(): <10}|')
-
-                    print(headers_str)
-                    battery_events_log.info (headers_str)
-
-                    for n in range(cells):
-                        cell_data = list (bat[n].values()) + [power_events_list[pwr[power-1]['bat_events']][1],power_events_list[pwr[power-1]['power_events']][1],sys_events_list[pwr[power-1]['sys_events']][1]]
-                        cell_data_str = (f'{cell_data[0]: <5}|\
-{cell_data[1]: <4}|\
-{cell_data[2]: <8}|\
-{cell_data[3]: <11}|\
-{cell_data[4]: <9}|\
-{cell_data[5]: <8}|\
-{cell_data[6]: <8}|\
-{cell_data[7]: <8}|\
-{cell_data[8]: <5}|\
-{cell_data[9]: <10}|\
-{cell_data[10]: <10}|\
-{cell_data[11]: <10}|\
-{cell_data[12]: <10}|')
-                        
-                        print(cell_data_str)
-                        battery_events_log.info (cell_data_str)
-
-                    print("------------------------------------------------------")
-
-                    pass
 
                 else:
-                    battery_events_log.info ('CHECK EVENTS - power_'+ str(power)+' cells details:cells data could not be read')
+                    # Parsing failed or no data available
+                    battery_events_log.info('CHECK EVENTS - power_' + str(power) + ' cells details: cells data could not be read')
 
     except Exception as e:
-        pytes_serial_log.warning ('CHECK EVENTS - error handling message: ' + str(e))
+        # Catch any unexpected error; do not crash the main loop
+        pytes_serial_log.warning('CHECK EVENTS - error handling message: ' + str(e))
+
 
 def parsing_bat(power):
     try:
