@@ -1,8 +1,8 @@
 configparser==7.0.0
 DateTime==5.5
-  pytz==2024.1
-  zope.interface==6.4.post2
-    setuptools==70.3.0
+pytz==2024.1
+zope.interface==6.4.post2
+setuptools>=78.1.1
 mysql-connector==2.2.9
 paho-mqtt==2.1.0
 pyserial==3.5
