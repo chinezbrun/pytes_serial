@@ -22,10 +22,10 @@ cells                  = int(config.get('battery_info', 'cells'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v0.9.0_20251018"
+sw_ver                = "PytesSerial v0.9.1_20260223"
 version               = sw_ver
 
-if reading_freq < 10  : reading_freq = 10
+#if reading_freq < 10  : reading_freq = 10
 
 SQL_active            = config.get('Maria DB connection', 'SQL_active')
 host                  = config.get('Maria DB connection', 'host')
@@ -216,6 +216,18 @@ pytes_serial_log    = setup_logger('pytes_serial', 'pytes_serial.log')
 battery_events_log  = setup_logger('battery_events', 'battery_events.log')
 
 # ------------------------functions area----------------------------
+def parse_number(s):
+    s = s.strip()
+    try:
+        if s.lower().startswith("0x"):
+            return int(s, 16)
+        elif any(c in "ABCDEFabcdef" for c in s):
+            return int(s, 16)
+        else:
+            return int(s)
+    except ValueError:
+        return None
+
 def serial_write(req, size):
     try:
         loop_time = time.time()
@@ -377,10 +389,12 @@ def parsing_serial():
                     if line_str[1:18] == 'Coul. Status    :': coul_st      = line_str[19:27]
                     if line_str[1:18] == 'Soh. Status     :': soh_st       = line_str[19:27]
                     if line_str[1:18] == 'Heater Status   :': heater_st    = line_str[19:27]
-                    if line_str[1:18] == 'Bat Events      :': bat_events   = int(line_str[19:27],16)
-                    if line_str[1:18] == 'Power Events    :': power_events = int(line_str[19:27],16)
-                    if line_str[1:18] == 'System Fault    :': sys_events   = int(line_str[19:27],16)
-
+                    
+                    # workaround to handle different firmware versions that send values
+                    # either in decimal or hexadecimal format
+                    if line_str[1:18] == 'Bat Events      :': bat_events = parse_number(line_str[19:].split()[0])                
+                    if line_str[1:18] == 'Power Events    :': power_events = parse_number(line_str[19:].split()[0])
+                    if line_str[1:18] == 'System Fault    :': sys_events = parse_number(line_str[19:].split()[0])
                     if line_str[1:18] == 'Command completed':   # mark end of the block
                         try:
                             decode ='false'
@@ -794,7 +808,8 @@ def mqtt_publish():
                 message = json.dumps(value)
             else:
                 message = json.dumps({'value': value})
-            publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
+                
+            publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
         # Publish device topics
         for device in json_data["devices"]:
@@ -819,7 +834,8 @@ def mqtt_publish():
                     message = json.dumps(value)
                 else:
                     message = json.dumps({'value': value})
-                publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
+                    
+                publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
         if cells_monitoring == 'true':
             for device in json_data["cells_data"]:
@@ -846,8 +862,9 @@ def mqtt_publish():
                         message = json.dumps(value)
                     else:
                         message = json.dumps({'value': value})
-                    publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
 
+                    publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0)
+                    
                 # Publish cell topics
                 for cell in device["cells"]:
                     cell_idx = str(cell["cell"] - 1)
@@ -873,7 +890,8 @@ def mqtt_publish():
                             message = json.dumps(value)
                         else:
                             message = json.dumps({'value': value})
-                        publish.single(state_topic, message, hostname=MQTT_broker, port=MQTT_port, auth=MQTT_auth)
+                            
+                        publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0)
 
         print ('...mqtt publish  : ok')
 
@@ -892,7 +910,7 @@ def check_events():
         # Iterate through all power packs/batteries
         for power in range(1, powers + 1):
             cell_data_req = "false"  # set to "true" if we need to read and print cell details
-
+            
             # --- Battery events filter (level-based) ---
             if power_events_list[pwr[power-1]['bat_events']][0] == events_mon_level or events_mon_level == "info":
                 print('...bat_event logged  :',
@@ -902,7 +920,7 @@ def check_events():
                 bat_events_no += 1
 
             # --- Power events filter (level-based) ---
-            if power_events_list[pwr[power-1]['power_events']][0] == events_mon_level or events_mon_level == "info":
+            if power_events_list[pwr[power-1]['power_events']][0] == events_mon_level or events_mon_level == "info":            
                 print('...power_event logged:',
                       str(power_events_list[pwr[power-1]['power_events']][1]),
                       str(power_events_list[pwr[power-1]['power_events']][2]))
@@ -921,11 +939,11 @@ def check_events():
             if cell_data_req == "true" and cells_details == 'true':
                 # Try to parse cell data for this power pack
                 if parsing_bat(power) == "true" and bat:
-                    print("------------------------------------------------------x")
+                    print("------------------------------------------------------")
 
                     # Build the header list from the first cell record + 3 event columns
                     headers = list(bat[0].keys()) + ['bat_events', 'pwr_events', 'sys_events']
-                    print(headers)  # debug print, same as before
+                    #print(headers)  # debug print, same as before
 
                     # Suggested minimum widths per known column (used as a floor)
                     width_map = {
@@ -1160,7 +1178,12 @@ print('...program initialisation completed starting main loop')
 
 pytes_serial_log.info ('START - ' + version)
 battery_events_log.info ('START - ' + version)
+
 json_data = {}
+
+# define time interval when full set of data will be send
+FULL_UPDATE_EVERY_MIN = 5     
+last_full_update = 0.0
 
 while True:
     time.sleep(0.2)
@@ -1197,13 +1220,20 @@ while True:
 
         if errors == 'false' and SQL_active == 'true':
             maria_db()
-
+            
         if errors == 'false' and MQTT_active == 'true':
+            now_ts = time.time()
+
+            # force full publish every X minutes
+            if (now_ts - last_full_update) >= FULL_UPDATE_EVERY_MIN * 60:
+                json_data_old = None          # disable deduplication once
+                last_full_update = now_ts
+                pytes_serial_log.debug ('MAIN LOOP - MQTT full update triggered')
+
             mqtt_publish_time = time.time()
             mqtt_publish()
-            mqtt_publish_time = (time.time() - mqtt_publish_time)
-            #print(round(mqtt_publish_time, 2)) #debug
-            
+            mqtt_publish_time = (time.time() - mqtt_publish_time)  
+
         if errors != 'false' :
             errors_no = errors_no + 1
 
