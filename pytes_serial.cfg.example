@@ -78,16 +78,6 @@ LOGGING_FILE_MAX_SIZE =5000
 LOGGING_FILE_MAX_FILES =1
 
 #---------------------------------------------------------------
-[events_monitoring]
-#events_monitoring                 # default =false   -- set 'true' to enable events monitoring
-#cells_details                     # default =true    -- set 'false' to disable cells details log in case of events 
-#monitoring_level                  # default =warning -- set to 'info' to have cells details for all events [recomanded only for debug purpose - high amount of data logged]
-
-events_monitoring     =false
-cells_details         =true
-monitoring_level      =warning
-
-#---------------------------------------------------------------
 [cells_monitoring]
 #cells_monitoring                  # default =false   -- set 'true' to enable cells monitoring via MQTT, sensors in HA will be created for each cell 
 #monitoring_level                  # default =medium  -- set to 'low' [shows:voltage] set to 'medium' [shows: voltage, temperature, status and statistics], set to 'high' shows all cells parameters [not recomanded for more than 4 batteries in bank due to high amount of data]
