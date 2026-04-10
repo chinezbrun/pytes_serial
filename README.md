@@ -8,7 +8,6 @@ The program reads the serial port at a specific frequency, parses the data, and 
 Configurable OPTIONS:
 - record data to MariaDB  
 - send data via MQTT  
-- events monitoring – when power events, battery events, or system faults occur, a log file is created with cell details  
 - cell monitoring – read cell details for all batteries in the bank. Three levels of detail can be selected in the config file.  
   More details can be found [here](/docs/configuration_details.txt)  
 
@@ -25,8 +24,6 @@ Basic statistics are also implemented. Therefore, additional sensors will be ava
 (e.g. `pytes_cells_voltage_max_1` means max cell voltage for battery 1).  
 
 If more sensors are needed, they can be added manually according to the Home Assistant documentation: [MQTT sensor](https://www.home-assistant.io/integrations/sensor.mqtt/) and the example in the docs folder [here](/docs/home_assistant_add_sensor.txt).  
-
-An experimental feature is implemented that allows recording a specific event (power events, system events) in the log file when needed. The file `events_config.json` is a list of all known events. Changing in the file the level from 'info' to 'warning' will do the trick. 
 
 You can find more [examples](/examples) for a better understanding of what the program does.  
 
