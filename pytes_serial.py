@@ -22,7 +22,7 @@ cells                  = int(config.get('battery_info', 'cells'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v1.0.0_20260409"
+sw_ver                = "PytesSerial v1.0.1_20260710"
 version               = sw_ver
 
 SQL_active            = config.get('Maria DB connection', 'SQL_active')
@@ -115,7 +115,8 @@ def serial_write(req, size):
 
         while True:
             if ser.in_waiting > size:
-                print ('...writing complete, in buffer: ', ser.in_waiting , round((time.time() - loop_time),2))
+                print('...writing complete, req:', req, 'size:', size,'in buffer:', ser.in_waiting, round((time.time() - loop_time),2))
+                #print ('...writing complete, in buffer: ', ser.in_waiting , round((time.time() - loop_time),2))
                 return "true"
 
             elif (time.time() - loop_time) > 1:
@@ -263,7 +264,8 @@ def parsing_serial():
                     if line_str[1:18] == 'Bat Events      :': bat_events = parse_number(line_str[19:].split()[0])                
                     if line_str[1:18] == 'Power Events    :': power_events = parse_number(line_str[19:].split()[0])
                     if line_str[1:18] == 'System Fault    :': sys_events = parse_number(line_str[19:].split()[0])
-                    if line_str[1:18] == 'Command completed':     # mark end of the block
+                    if line_str.strip().startswith('Command completed'): # mark end of the block
+                        
                         try:
                             decode ='false'
                             print ('power           :', power)
@@ -487,6 +489,7 @@ def mqtt_discovery():
         dev_cla      =["current",       "voltage",      "temperature",  "battery",      None]
         stat_cla     =["measurement",   "measurement",  "measurement",  "measurement",  None]
         unit_of_meas =["A",             "V",            "°C",           "%",            None]
+        precision    =[2,               2,              1,              0,              None]
 
         max_config   = max_config + len(ids)
 
@@ -501,6 +504,8 @@ def mqtt_discovery():
                 msg ["stat_cla"] = stat_cla[n]
             if unit_of_meas[n] != None:
                 msg ["unit_of_meas"] = unit_of_meas[n]
+            if precision[n] != None:
+                msg ["suggested_display_precision"] = precision[n]
 
             msg ["val_tpl"]      = "{{ value_json.value }}"
             msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}
@@ -522,6 +527,7 @@ def mqtt_discovery():
         dev_cla      =["current",       "voltage",      "temperature",  "battery",      None]
         stat_cla     =["measurement",   "measurement",  "measurement",  "measurement",  None]
         unit_of_meas =["A",             "V",            "°C",           "%",            None]
+        precision    =[2,               2,              1,              0,              None]
 
         max_config   = max_config + powers*len(ids)
 
@@ -537,6 +543,8 @@ def mqtt_discovery():
                     msg ["stat_cla"]  = stat_cla[n]
                 if unit_of_meas[n] != None:
                     msg ["unit_of_meas"] = unit_of_meas[n]
+                if precision[n] != None:
+                    msg ["suggested_display_precision"] = precision[n]
 
                 msg ["val_tpl"]      = "{{ value_json.value }}"
                 msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}
@@ -562,6 +570,7 @@ def mqtt_discovery():
                 dev_cla      =["voltage",       "temperature",  "battery",      None,       None,       None,       None]
                 stat_cla     =["measurement",   "measurement",  "measurement",  None,       None,       None,       None]
                 unit_of_meas =["V",             "°C",           "%",            None,       None,       None,       None]
+                precision    =[3,               1,              0,              None,       None,       None,       None]
                 
             elif cells_mon_level == 'medium':
                 names        =["voltage",       "temperature",  "volt_st"]
@@ -569,13 +578,15 @@ def mqtt_discovery():
                 dev_cla      =["voltage",       "temperature",       None]
                 stat_cla     =["measurement",   "measurement",       None]
                 unit_of_meas =["V",             "°C",                None]
+                precision    =[3,               1,                   None]
                 
             else:
                 names        =["voltage"]
                 ids          =["voltage"]
                 dev_cla      =["voltage"]
                 stat_cla     =["measurement"]
-                unit_of_meas =["V"]            
+                unit_of_meas =["V"]
+                precision    =[3]            
             
             max_config   = max_config + powers*len(ids)*cells
 
@@ -597,6 +608,8 @@ def mqtt_discovery():
                             msg ["stat_cla"]  = stat_cla[n]
                         if unit_of_meas[n] != None:
                             msg ["unit_of_meas"] = unit_of_meas[n]
+                        if precision[n] != None:
+                            msg ["suggested_display_precision"] = precision[n]
 
                         msg ["val_tpl"]      = "{{ value_json.value }}"
                         msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
@@ -621,6 +634,7 @@ def mqtt_discovery():
                 dev_cla      =["voltage",       "voltage",      "voltage",      "temperature",          "temperature",      "temperature"]
                 stat_cla     =["measurement",   "measurement",  "measurement",  "measurement",          "measurement",      "measurement"]
                 unit_of_meas =["V",             "V",            "V",            "°C",                   "°C",               "°C"]
+                precision    =[3,               3,              3,              1,                      1,                  1]
 
                 max_config   = max_config + powers*len(ids)
 
@@ -636,6 +650,8 @@ def mqtt_discovery():
                             msg ["stat_cla"]  = stat_cla[n]
                         if unit_of_meas[n] != None:
                             msg ["unit_of_meas"] = unit_of_meas[n]
+                        if precision[n] != None:
+                            msg ["suggested_display_precision"] = precision[n]
 
                         msg ["val_tpl"]      = "{{ value_json.value }}"
                         msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
@@ -774,7 +790,7 @@ def parsing_bat(power):
         bat = []
         
         req  = ('bat '+ str(power))
-        size = 1000
+        size = 800
         write_return = serial_write(req,size)
 
         if write_return != 'true':
