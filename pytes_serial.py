@@ -22,7 +22,7 @@ cells                  = int(config.get('battery_info', 'cells'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v1.0.1_20260710"
+sw_ver                = "PytesSerial v1.1.0_20260713"
 version               = sw_ver
 
 SQL_active            = config.get('Maria DB connection', 'SQL_active')
@@ -64,6 +64,8 @@ line_str_array        = []                                    # type: list[str] 
 bat_events_no         = 0                                     # used to count numbers of battery events
 pwr_events_no         = 0                                     # used to count numbers of power events
 sys_events_no         = 0                                     # used to count numbers of system events
+
+END_MARKERS           = [ "PYTES>" , "PYTES_debug>" , "pylon>" , "pylon_debug>",] # used for end of transmition
 
 print("software version:",version)
 
@@ -116,7 +118,6 @@ def serial_write(req, size):
         while True:
             if ser.in_waiting > size:
                 print('...writing complete, req:', req, 'size:', size,'in buffer:', ser.in_waiting, round((time.time() - loop_time),2))
-                #print ('...writing complete, in buffer: ', ser.in_waiting , round((time.time() - loop_time),2))
                 return "true"
 
             elif (time.time() - loop_time) > 1:
@@ -136,47 +137,119 @@ def serial_write(req, size):
     except Exception as e:
         print('...serial write error: '+ str(e))
         pytes_serial_log.warning ('SERIAL WRITE - error handling message: '+ str(e))
-
-def serial_read(start,stop):
+        
+def serial_read(start, stop):
     try:
         global line_str_array
-        line_str        = ""
-        line_str_array  = []
+
+        raw_bytes      = b''
+        line_str_array = []
+
+        idle_timeout  = 0.1
+        total_timeout = 5.0
 
         if ser.is_open != True:
             ser.open()
             time.sleep(0.5)
-            print ('...open serial')
+            print('...open serial')
+
+        if stop != 'none':
+            stop_bytes = [marker.encode('latin-1') for marker in stop]
+        else:
+            stop_bytes = []
+
+        start_time     = time.monotonic()
+        last_data_time = None
+        read_end       = 'UNKNOWN'
 
         while True:
             if ser.in_waiting > 0:
-                line          = ser.read()
-                line_str      = line_str + line.decode('latin-1')
+                data = ser.read(ser.in_waiting)
 
-                if line == b'\n':
-                    if start == 'none' or start in line_str:
-                        start = 'true'
+                raw_bytes += data
+                last_data_time = time.monotonic()
 
-                    if start == 'true' and stop != 'true':
-                        line_str_array.append(line_str)
-
-                    if start == 'true' and stop in line_str:
-                        stop = 'true'
-
-                    line_str = ""
+                # Exit immediately when an end marker is detected.
+                if stop != 'none':
+                    if any(marker in raw_bytes for marker in stop_bytes):
+                        read_end = 'MARKER'
+                        break
 
             else:
-                 break
+                # Used only to drain the input buffer.
+                if start == 'none' and stop == 'none':
+                    read_end = 'DRAIN'
+                    break
 
-        return stop
+            now = time.monotonic()
+
+            # No new data received for idle_timeout seconds.
+            if last_data_time != None:
+                if now - last_data_time >= idle_timeout:
+                    read_end = 'IDLE'
+                    break
+
+            # Safety timeout.
+            if now - start_time >= total_timeout:
+                read_end = 'TOTAL_TIMEOUT'
+                break
+
+            time.sleep(0.005)
+
+        # Split the response into lines.
+        # Keep the last fragment even if it has no '\n'
+        # (e.g. "PYTES>").
+        parts = raw_bytes.split(b'\n')
+
+        start_found = start == 'none'
+        stop_found  = stop  == 'none'
+
+        for i, part in enumerate(parts):
+            if i < len(parts) - 1:
+                line_str = (part + b'\n').decode('latin-1')
+            elif part:
+                line_str = part.decode('latin-1')
+            else:
+                continue
+            if start != 'none' and start in line_str:
+                start_found = True
+
+            if start_found:
+                line_str_array.append(line_str)
+
+            if stop != 'none':
+                if any(marker in line_str for marker in stop):
+                    stop_found = True
+
+        if start_found and stop_found:
+            return 'true'
+
+        pytes_serial_log.debug(
+            'SERIAL READ - incomplete response'
+            + ' read_end:' + str(read_end)
+            + ' start_found:' + str(start_found)
+            + ' stop_found:' + str(stop_found)
+            + ' bytes:' + str(len(raw_bytes))
+            + ' line_str_array:' + str(line_str_array)
+        )
+
+        return 'false'
 
     except Exception as e:
         print('...serial read error: ' + str(e))
-        pytes_serial_log.warning ('SERIAL READ - error handling message: ' + str(e))
-        pytes_serial_log.debug ('SERIAL READ - line:' + str(line)  + ' line_str_array: ' + str(line_str_array))
+
+        pytes_serial_log.warning(
+            'SERIAL READ - error handling message: ' + str(e)
+        )
+
+        pytes_serial_log.debug(
+            'SERIAL READ - line_str_array: ' + str(line_str_array)
+        )
 
         line_str_array = []
 
+        return 'false'
+    
 def parsing_serial():
     try:
         global line_str_array
@@ -198,51 +271,62 @@ def parsing_serial():
         line_str_array_bak = []
 
         for power in range (1, powers + 1):
-            req  = ('pwr '+ str(power))
-            size = 800
+            req       = ('pwr '+ str(power))
+            start     = ('Power  '+ str(power))
+            size      = 800
             rw_trials = 0
-
+            
             while True:
-                write_return = serial_write(req,size)
+                write_return = serial_write(req, size)
 
                 if write_return == 'true':
-                    read_return = serial_read(req,'Command completed')
+                    read_return = serial_read(start, END_MARKERS)
 
                     if line_str_array and read_return == 'true':
                         rw_trials = 0
                         break
 
-                    else:
-                        pass
+                rw_trials = rw_trials + 1
+                buffer = ser.in_waiting
 
-                elif rw_trials <= 5:
-                    rw_trials  = rw_trials +1
-                    buffer     = ser.in_waiting
+                if rw_trials <= 5:
+                    serial_read('none', 'none')
 
-                    serial_read('none','none')
-                    pytes_serial_log.debug ('PARSING SERIAL - power:' + str(power)  + ' rw_trial:' + str(rw_trials) + ' err_no:' + str(errors_no) + \
-                         ' timeout in_buffer:' + str(buffer) + ' < ' + str(size) + ' line_str_array: ' + str(line_str_array))
+                    pytes_serial_log.debug(
+                        'PARSING SERIAL - power:' + str(power)
+                        + ' rw_trial:' + str(rw_trials)
+                        + ' err_no:' + str(errors_no)
+                        + ' timeout in_buffer:' + str(buffer)
+                        + ' < ' + str(size)
+                        + ' line_str_array:' + str(line_str_array)
+                    )
 
-                    line_str_array  = []
+                    line_str_array = []
 
                 else:
                     errors = 'true'
-                    buffer     = ser.in_waiting
 
-                    print ('...timeouts -> close serial, skip set')
-                    pytes_serial_log.error ('PARSING SERIAL - power:' + str(power)  + ' rw_trial:' + str(rw_trials) + ' err_no:' + str(errors_no) + \
-                    ' timeouts -> close serial in_buffer:' + str(buffer) + ' < ' + str(size) + ' line_str_array: ' + str(line_str_array))
+                    print('...timeouts -> close serial, skip set')
+
+                    pytes_serial_log.error(
+                        'PARSING SERIAL - power:' + str(power)
+                        + ' rw_trial:' + str(rw_trials)
+                        + ' err_no:' + str(errors_no)
+                        + ' timeouts -> close serial in_buffer:' + str(buffer)
+                        + ' < ' + str(size)
+                        + ' line_str_array:' + str(line_str_array)
+                    )
 
                     if ser.is_open == True:
                         ser.close()
 
                     return
-
+    
             decode             = 'false'
             line_str_array_bak = line_str_array               # for debug purposes only
 
             for line_str in line_str_array:
-                if req in line_str:                           # search for pwr X in line and mark beginning of the block
+                if start in line_str:                         # search for Power X in line and mark beginning of the block
                     decode ='true'
 
                 # parsing data
@@ -264,6 +348,7 @@ def parsing_serial():
                     if line_str[1:18] == 'Bat Events      :': bat_events = parse_number(line_str[19:].split()[0])                
                     if line_str[1:18] == 'Power Events    :': power_events = parse_number(line_str[19:].split()[0])
                     if line_str[1:18] == 'System Fault    :': sys_events = parse_number(line_str[19:].split()[0])
+                    
                     if line_str.strip().startswith('Command completed'): # mark end of the block
                         
                         try:
@@ -790,18 +875,18 @@ def parsing_bat(power):
         bat = []
         
         req  = ('bat '+ str(power))
-        size = 800
+        size = 1000
         write_return = serial_write(req,size)
 
         if write_return != 'true':
             return "false"
 
-        read_return = serial_read('Battery','Command completed')
+        read_return = serial_read('Battery', END_MARKERS)
 
         if read_return != 'true' or not line_str_array:
             return "false"
 
-        pytes_serial_log.debug("parsing_bat: line_str_array = " + json.dumps(line_str_array, indent=2))
+        #pytes_serial_log.debug("parsing_bat: line_str_array = " + json.dumps(line_str_array, indent=2))
 
         cell_idx        = -1
         volt_idx        = -1
@@ -816,10 +901,11 @@ def parsing_bat(power):
         is_pylontech    = False
 
         for i, line_str in enumerate(line_str_array):
+            
             # Last line is command completed message
-            if i == len(line_str_array) - 1:
+            if line_str.strip().startswith('Command completed'):
                 break
-
+            
             # First line is table header
             elif i == 0:
                 line = re.split(r'\s{2,}', line_str.strip())   # type: list[str] # Each column is delimited by at least 2 spaces
