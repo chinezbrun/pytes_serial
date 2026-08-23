@@ -60,6 +60,9 @@ errors_no             = 0                                     # used to count nu
 trials                = 0                                     # used to improve data reading accuracy -- def parsing_serial
 errors                = 'false'
 line_str_array        = []                                    # type: list[str] # used to get line strings from serial
+bat_events_no         = 0                                     # non-zero Bat Events readings since program start
+pwr_events_no         = 0                                     # non-zero Power Events readings since program start
+sys_events_no         = 0                                     # non-zero System Fault readings since program start
 
 END_MARKERS           = [ "PYTES>" , "PYTES_debug>" , "pylon>" , "pylon_debug>",] # used for end of transmition
 
@@ -279,6 +282,9 @@ def parsing_serial():
         global errors
         global trials
         global pwr
+        global bat_events_no
+        global pwr_events_no
+        global sys_events_no
         volt_st      = None
         current_st   = None
         temp_st      = None
@@ -294,6 +300,11 @@ def parsing_serial():
         line_str_array_bak = []
 
         for power in range (1, powers + 1):
+            # Event values belong to the current power response only.
+            bat_events   = None
+            power_events = None
+            sys_events   = None
+
             req       = ('pwr '+ str(power))
             start     = ('Power  '+ str(power))
             size      = 800
@@ -408,6 +419,16 @@ def parsing_serial():
                                         'power_events': power_events,
                                         'sys_events': sys_events}
 
+                            # Count each successfully parsed reading where the BMS reports
+                            # a non-zero event/fault value. The actual event value is still
+                            # preserved in pwr_array.
+                            if bat_events not in (None, 0):
+                                bat_events_no += 1
+                            if power_events not in (None, 0):
+                                pwr_events_no += 1
+                            if sys_events not in (None, 0):
+                                sys_events_no += 1
+
                             data_set       = data_set +1
                             pwr.append(pwr_array)
                             line_str_array = []
@@ -495,6 +516,9 @@ def json_serialize():
         global errors
         global json_data
         global json_data_old
+        global bat_events_no
+        global pwr_events_no
+        global sys_events_no
         global bats
 
         json_data_old = json_data
@@ -510,6 +534,9 @@ def json_serialize():
                    'serial_stat': {'uptime':uptime,
                                    'loops':loops_no,
                                    'errors': errors_no,
+                                   'bat_events_no': bat_events_no,
+                                   'pwr_events_no': pwr_events_no,
+                                   'sys_events_no': sys_events_no,
                                    'efficiency' :round((1-(errors_no/loops_no))*100,2),
                                    'ser_round_trip':round(parsing_time,2)}
                    }
@@ -1121,6 +1148,7 @@ while True:
             errors_no = errors_no + 1
 
         print ('...serial stat   :', 'loops:' , loops_no, 'errors:', errors_no, 'efficiency:', round((1-(errors_no/loops_no))*100, 2))
+        print ('...serial stat   :', 'bat events_no:' , bat_events_no, 'pwr events_no:', pwr_events_no, 'sys events_no:', sys_events_no)
         print ('...serial stat   :', 'parsing round-trip:' , round(parsing_time, 2))
         print ('------------------------------------------------------')
 
