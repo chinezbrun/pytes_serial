@@ -12,7 +12,6 @@ import re
 # -------------------- VARIABLES INITIALIZATION ---------------------
 config                = ConfigParser()
 config.read('pytes_serial.cfg')
-
 serial_port           = config.get('serial', 'serial_port')
 serial_baudrate       = int(config.get('serial', 'serial_baudrate'))
 reading_freq          = int(config.get('serial', 'reading_freq'))
@@ -22,7 +21,7 @@ cells                  = int(config.get('battery_info', 'cells'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v1.1.0_20260713"
+sw_ver                = "PytesSerial v1.1.1_20260823"
 version               = sw_ver
 
 SQL_active            = config.get('Maria DB connection', 'SQL_active')
@@ -61,9 +60,6 @@ errors_no             = 0                                     # used to count nu
 trials                = 0                                     # used to improve data reading accuracy -- def parsing_serial
 errors                = 'false'
 line_str_array        = []                                    # type: list[str] # used to get line strings from serial
-bat_events_no         = 0                                     # used to count numbers of battery events
-pwr_events_no         = 0                                     # used to count numbers of power events
-sys_events_no         = 0                                     # used to count numbers of system events
 
 END_MARKERS           = [ "PYTES>" , "PYTES_debug>" , "pylon>" , "pylon_debug>",] # used for end of transmition
 
@@ -97,47 +93,59 @@ def parse_number(s):
             return int(s)
     except ValueError:
         return None
-
+    
 def serial_write(req, size):
     try:
         loop_time = time.time()
+        recovery_used = False
 
         if ser.is_open != True:
             ser.open()
             time.sleep(0.5)
-            print ('...open serial')
-
-        ser.reset_input_buffer()
-        ser.reset_output_buffer()
+            print('...open serial')
 
         bytes_req = bytes(str(req), 'latin-1')
+
+        # Normal command
         ser.write(bytes_req + b'\n')
         ser.flush()
-        time.sleep(0.1)
 
+        # Wait up to 0.5 s for normal response
+        while (time.time() - loop_time) < 0.5:
+            if ser.in_waiting > size:
+                return "true"
+            time.sleep(0.005)
+
+        # Recovery
         while True:
             if ser.in_waiting > size:
-                print('...writing complete, req:', req, 'size:', size,'in buffer:', ser.in_waiting, round((time.time() - loop_time),2))
                 return "true"
 
-            elif (time.time() - loop_time) > 1:
+            elif (time.time() - loop_time) > 1.2:
                 return "false"
 
-            elif ser.in_waiting < 100 and (time.time() - loop_time) > 0.4:
+            elif (
+                ser.in_waiting < 100
+                and (time.time() - loop_time) > 0.8
+            ):
                 ser.reset_input_buffer()
                 ser.reset_output_buffer()
                 ser.write(bytes_req + b'\n')
                 ser.flush()
-                time.sleep(0.25)
+                time.sleep(0.3)
 
             else:
-                ser.write(b'\n')
+                if recovery_used == False:
+                    recovery_used = True
+                    ser.write(b'\n')
                 time.sleep(0.1)
 
     except Exception as e:
-        print('...serial write error: '+ str(e))
-        pytes_serial_log.warning ('SERIAL WRITE - error handling message: '+ str(e))
-        
+        print('...serial write error: ' + str(e))
+        pytes_serial_log.warning(
+            'SERIAL WRITE - error handling message: ' + str(e)
+        )
+
 def serial_read(start, stop):
     try:
         global line_str_array
@@ -145,7 +153,7 @@ def serial_read(start, stop):
         raw_bytes      = b''
         line_str_array = []
 
-        idle_timeout  = 0.1
+        idle_timeout  = 0.2
         total_timeout = 5.0
 
         if ser.is_open != True:
@@ -177,10 +185,18 @@ def serial_read(start, stop):
 
             else:
                 # Used only to drain the input buffer.
+                # Exit only after the line stayed quiet for idle_timeout.
                 if start == 'none' and stop == 'none':
-                    read_end = 'DRAIN'
-                    break
 
+                    now = time.monotonic()
+
+                    if last_data_time is None:
+                        last_data_time = now
+
+                    elif now - last_data_time >= idle_timeout:
+                        read_end = 'DRAIN'
+                        break
+                    
             now = time.monotonic()
 
             # No new data received for idle_timeout seconds.
@@ -222,6 +238,12 @@ def serial_read(start, stop):
                     stop_found = True
 
         if start_found and stop_found:
+            if start != 'none':
+                print(
+                    '...reading complete, start:', start,
+                    'bytes:', len(raw_bytes),
+                    'time:', round(time.monotonic() - start_time, 3)
+                )
             return 'true'
 
         pytes_serial_log.debug(
@@ -230,6 +252,7 @@ def serial_read(start, stop):
             + ' start_found:' + str(start_found)
             + ' stop_found:' + str(stop_found)
             + ' bytes:' + str(len(raw_bytes))
+            + ' raw_bytes:' + repr(raw_bytes)
             + ' line_str_array:' + str(line_str_array)
         )
 
@@ -296,9 +319,7 @@ def parsing_serial():
                         'PARSING SERIAL - power:' + str(power)
                         + ' rw_trial:' + str(rw_trials)
                         + ' err_no:' + str(errors_no)
-                        + ' timeout in_buffer:' + str(buffer)
-                        + ' < ' + str(size)
-                        + ' line_str_array:' + str(line_str_array)
+                        + ' in_buffer:' + str(buffer)
                     )
 
                     line_str_array = []
@@ -474,9 +495,6 @@ def json_serialize():
         global errors
         global json_data
         global json_data_old
-        global bat_events_no
-        global pwr_events_no
-        global sys_events_no
         global bats
 
         json_data_old = json_data
@@ -492,9 +510,6 @@ def json_serialize():
                    'serial_stat': {'uptime':uptime,
                                    'loops':loops_no,
                                    'errors': errors_no,
-                                   'bat_events_no': bat_events_no,
-                                   'pwr_events_no': pwr_events_no,
-                                   'sys_events_no': sys_events_no,
                                    'efficiency' :round((1-(errors_no/loops_no))*100,2),
                                    'ser_round_trip':round(parsing_time,2)}
                    }
@@ -1080,6 +1095,8 @@ while True:
             check_cells_time = (time.time() - check_cells_time)
             parsing_time     = parsing_time + check_cells_time
             # print(round(check_cells_time, 2)) #debug
+
+
             
         if errors == 'false':
             json_serialize()
@@ -1104,7 +1121,6 @@ while True:
             errors_no = errors_no + 1
 
         print ('...serial stat   :', 'loops:' , loops_no, 'errors:', errors_no, 'efficiency:', round((1-(errors_no/loops_no))*100, 2))
-        print ('...serial stat   :', 'bat events_no:' , bat_events_no, 'pwr events_no:', pwr_events_no, 'sys events_no:', sys_events_no)
         print ('...serial stat   :', 'parsing round-trip:' , round(parsing_time, 2))
         print ('------------------------------------------------------')
 
