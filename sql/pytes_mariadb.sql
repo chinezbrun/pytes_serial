@@ -1,11 +1,6 @@
 -- phpMyAdmin SQL Dump
 -- version 4.9.7
 -- https://www.phpmyadmin.net/
---
--- Host: localhost
--- Generation Time: Jan 23, 2023 at 08:38 PM
--- Server version: 10.3.32-MariaDB
--- PHP Version: 7.4.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 SET AUTOCOMMIT = 0;
@@ -42,12 +37,6 @@ CREATE TABLE IF NOT EXISTS `pwr_data` (
   `volt_st` varchar(11) DEFAULT NULL,
   `current_st` varchar(11) DEFAULT NULL,
   `temp_st` varchar(11) DEFAULT NULL,
-  `coul_st` varchar(11) DEFAULT NULL,
-  `soh_st` varchar(11) DEFAULT NULL,
-  `heater_st` varchar(11) DEFAULT NULL,
-  `bat_events` int(11) DEFAULT NULL,
-  `power_events` int(11) DEFAULT NULL,
-  `sys_events` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 COMMIT;
