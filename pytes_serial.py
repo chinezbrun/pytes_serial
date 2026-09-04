@@ -21,7 +21,7 @@ cells                  = int(config.get('battery_info', 'cells'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v1.1.1_20260823"
+sw_ver                = "PytesSerial v2.0.0"
 version               = sw_ver
 
 SQL_active            = config.get('Maria DB connection', 'SQL_active')
@@ -53,17 +53,13 @@ cells_mon_level        = config.get('cells_monitoring', 'monitoring_level')
 start_time            = time.time()                           # initialization time
 up_time               = time.time()                           # used to calculate uptime
 pwr                   = []                                    # used to serialize JSON data
-bat                   = []                                    # used to record cells data -- def parsing_bat
+bat                   = []                                    # used to record cells data -- def parse_bat
 bats                  = []                                    # used to serialize JSON data -- def check_cells
 loops_no              = 0                                     # used to count number of loops and to calculate % of errors
 errors_no             = 0                                     # used to count number of errors and to calculate %
-trials                = 0                                     # used to improve data reading accuracy -- def parsing_serial
+trials                = 0                                     # used to improve data reading accuracy -- def parse_pwr
 errors                = 'false'
 line_str_array        = []                                    # type: list[str] # used to get line strings from serial
-bat_events_no         = 0                                     # non-zero Bat Events readings since program start
-pwr_events_no         = 0                                     # non-zero Power Events readings since program start
-sys_events_no         = 0                                     # non-zero System Fault readings since program start
-
 END_MARKERS           = [ "PYTES>" , "PYTES_debug>" , "pylon>" , "pylon_debug>",] # used for end of transmition
 
 print("software version:",version)
@@ -82,24 +78,11 @@ def setup_logger(name, log_file, level=LOGGING_LEVEL_FILE):
     return logger
 
 pytes_serial_log    = setup_logger('pytes_serial', 'pytes_serial.log')
-battery_events_log  = setup_logger('battery_events', 'battery_events.log')
 
 # -------------------- FUNCTIONS ------------------------------------
-def parse_number(s):
-    s = s.strip()
+def write_serial(req, size):
     try:
-        if s.lower().startswith("0x"):
-            return int(s, 16)
-        elif any(c in "ABCDEFabcdef" for c in s):
-            return int(s, 16)
-        else:
-            return int(s)
-    except ValueError:
-        return None
-    
-def serial_write(req, size):
-    try:
-        loop_time = time.time()
+        loop_time     = time.time()
         recovery_used = False
 
         if ser.is_open != True:
@@ -117,6 +100,7 @@ def serial_write(req, size):
         while (time.time() - loop_time) < 0.5:
             if ser.in_waiting > size:
                 return "true"
+
             time.sleep(0.005)
 
         # Recovery
@@ -131,6 +115,9 @@ def serial_write(req, size):
                 ser.in_waiting < 100
                 and (time.time() - loop_time) > 0.8
             ):
+                if recovery_used == False:
+                    recovery_used = True
+
                 ser.reset_input_buffer()
                 ser.reset_output_buffer()
                 ser.write(bytes_req + b'\n')
@@ -141,6 +128,7 @@ def serial_write(req, size):
                 if recovery_used == False:
                     recovery_used = True
                     ser.write(b'\n')
+
                 time.sleep(0.1)
 
     except Exception as e:
@@ -149,7 +137,7 @@ def serial_write(req, size):
             'SERIAL WRITE - error handling message: ' + str(e)
         )
 
-def serial_read(start, stop):
+def read_serial(start, stop):
     try:
         global line_str_array
 
@@ -171,7 +159,6 @@ def serial_read(start, stop):
 
         start_time     = time.monotonic()
         last_data_time = None
-        read_end       = 'UNKNOWN'
 
         while True:
             if ser.in_waiting > 0:
@@ -183,7 +170,6 @@ def serial_read(start, stop):
                 # Exit immediately when an end marker is detected.
                 if stop != 'none':
                     if any(marker in raw_bytes for marker in stop_bytes):
-                        read_end = 'MARKER'
                         break
 
             else:
@@ -197,20 +183,17 @@ def serial_read(start, stop):
                         last_data_time = now
 
                     elif now - last_data_time >= idle_timeout:
-                        read_end = 'DRAIN'
                         break
-                    
+
             now = time.monotonic()
 
             # No new data received for idle_timeout seconds.
             if last_data_time != None:
                 if now - last_data_time >= idle_timeout:
-                    read_end = 'IDLE'
                     break
 
             # Safety timeout.
             if now - start_time >= total_timeout:
-                read_end = 'TOTAL_TIMEOUT'
                 break
 
             time.sleep(0.005)
@@ -251,7 +234,6 @@ def serial_read(start, stop):
 
         pytes_serial_log.debug(
             'SERIAL READ - incomplete response'
-            + ' read_end:' + str(read_end)
             + ' start_found:' + str(start_found)
             + ' stop_found:' + str(stop_found)
             + ' bytes:' + str(len(raw_bytes))
@@ -275,193 +257,222 @@ def serial_read(start, stop):
         line_str_array = []
 
         return 'false'
-    
-def parsing_serial():
+
+def parse_pwr():
     try:
         global line_str_array
         global errors
         global trials
         global pwr
-        global bat_events_no
-        global pwr_events_no
-        global sys_events_no
-        volt_st      = None
-        current_st   = None
-        temp_st      = None
-        coul_st      = None
-        soh_st       = None
-        heater_st    = None
-        bat_events   = None
-        power_events = None
-        sys_events   = None
 
         data_set           = 0
         pwr                = []
         line_str_array_bak = []
 
-        for power in range (1, powers + 1):
-            # Event values belong to the current power response only.
-            bat_events   = None
-            power_events = None
-            sys_events   = None
+        req       = 'pwr'
+        start     = 'Power Volt'
+        size      = 800
+        rw_trials = 0
 
-            req       = ('pwr '+ str(power))
-            start     = ('Power  '+ str(power))
-            size      = 800
-            rw_trials = 0
-            
-            while True:
-                write_return = serial_write(req, size)
+        while True:
+            write_return = write_serial(req, size)
 
-                if write_return == 'true':
-                    read_return = serial_read(start, END_MARKERS)
+            if write_return == 'true':
+                read_return = read_serial(start, END_MARKERS)
 
-                    if line_str_array and read_return == 'true':
-                        rw_trials = 0
-                        break
+                if line_str_array and read_return == 'true':
+                    rw_trials = 0
+                    break
 
-                rw_trials = rw_trials + 1
-                buffer = ser.in_waiting
+            rw_trials = rw_trials + 1
+            buffer = ser.in_waiting
 
-                if rw_trials <= 5:
-                    serial_read('none', 'none')
+            if rw_trials <= 5:
+                read_serial('none', 'none')
 
-                    pytes_serial_log.debug(
-                        'PARSING SERIAL - power:' + str(power)
-                        + ' rw_trial:' + str(rw_trials)
-                        + ' err_no:' + str(errors_no)
-                        + ' in_buffer:' + str(buffer)
-                    )
-
-                    line_str_array = []
-
+                if write_return != 'true':
+                    rw_failure = 'write:false'
                 else:
-                    errors = 'true'
+                    rw_failure = 'read:false'
 
-                    print('...timeouts -> close serial, skip set')
+                pytes_serial_log.debug(
+                    'PARSING SERIAL - pwr ' + rw_failure
+                    + ' rw_trial:' + str(rw_trials)
+                    + ' err_no:' + str(errors_no)
+                    + ' in_buffer:' + str(buffer)
+                )
 
-                    pytes_serial_log.error(
-                        'PARSING SERIAL - power:' + str(power)
-                        + ' rw_trial:' + str(rw_trials)
-                        + ' err_no:' + str(errors_no)
-                        + ' timeouts -> close serial in_buffer:' + str(buffer)
-                        + ' < ' + str(size)
-                        + ' line_str_array:' + str(line_str_array)
-                    )
+                line_str_array = []
 
-                    if ser.is_open == True:
-                        ser.close()
+            else:
+                errors = 'true'
 
-                    return
-    
-            decode             = 'false'
-            line_str_array_bak = line_str_array               # for debug purposes only
+                print('...timeouts -> close serial, skip set')
 
-            for line_str in line_str_array:
-                if start in line_str:                         # search for Power X in line and mark beginning of the block
-                    decode ='true'
+                pytes_serial_log.error(
+                    'PARSING SERIAL - pwr'
+                    + ' rw_trial:' + str(rw_trials)
+                    + ' err_no:' + str(errors_no)
+                    + ' timeouts -> close serial in_buffer:' + str(buffer)
+                    + ' line_str_array:' + str(line_str_array)
+                )
 
-                # parsing data
-                if decode =='true':
-                    if line_str[1:18] == 'Voltage         :': voltage      = round(int(line_str[19:27])/1000, 2)
-                    if line_str[1:18] == 'Current         :': current      = round(int(line_str[19:27])/1000, 2)
-                    if line_str[1:18] == 'Temperature     :': temp         = round(int(line_str[19:27])/1000, 1)
-                    if line_str[1:18] == 'Coulomb         :': soc          = int(line_str[19:27])
-                    if line_str[1:18] == 'Basic Status    :': basic_st     = line_str[19:27]
-                    if line_str[1:18] == 'Volt Status     :': volt_st      = line_str[19:27]
-                    if line_str[1:18] == 'Current Status  :': current_st   = line_str[19:27]
-                    if line_str[1:18] == 'Tmpr. Status    :': temp_st      = line_str[19:27]
-                    if line_str[1:18] == 'Coul. Status    :': coul_st      = line_str[19:27]
-                    if line_str[1:18] == 'Soh. Status     :': soh_st       = line_str[19:27]
-                    if line_str[1:18] == 'Heater Status   :': heater_st    = line_str[19:27]
-                    
-                    # Workaround to handle different firmware versions that send values
-                    # either in decimal or hexadecimal format
-                    if line_str[1:18] == 'Bat Events      :': bat_events = parse_number(line_str[19:].split()[0])                
-                    if line_str[1:18] == 'Power Events    :': power_events = parse_number(line_str[19:].split()[0])
-                    if line_str[1:18] == 'System Fault    :': sys_events = parse_number(line_str[19:].split()[0])
-                    
-                    if line_str.strip().startswith('Command completed'): # mark end of the block
-                        
-                        try:
-                            decode ='false'
-                            print ('power           :', power)
-                            print ('voltage         :', voltage)
-                            print ('current         :', current)
-                            print ('temperature     :', temp)
-                            print ('soc [%]         :', soc)
-                            print ('basic_st        :', basic_st)
-                            print ('volt_st         :', volt_st)
-                            print ('current_st      :', current_st)
-                            print ('temp_st         :', temp_st)
-                            print ('coul_st         :', coul_st)
-                            print ('soh_st          :', soh_st)
-                            print ('heater_st       :', heater_st)
-                            print ('bat_events      :', bat_events)
-                            print ('power_events    :', power_events)
-                            print ('sys_fault       :', sys_events)
-                            print ('---------------------------')
+                if ser.is_open == True:
+                    ser.close()
 
-                            pwr_array = {
-                                        'power': power,
-                                        'voltage': voltage,
-                                        'current': current,
-                                        'temperature': temp,
-                                        'soc': soc,
-                                        'basic_st': basic_st,
-                                        'volt_st': volt_st,
-                                        'current_st': current_st,
-                                        'temp_st':temp_st,
-                                        'soh_st':soh_st,
-                                        'coul_st': coul_st,
-                                        'heater_st': heater_st,
-                                        'bat_events': bat_events,
-                                        'power_events': power_events,
-                                        'sys_events': sys_events}
+                return
 
-                            # Count each successfully parsed reading where the BMS reports
-                            # a non-zero event/fault value. The actual event value is still
-                            # preserved in pwr_array.
-                            if bat_events not in (None, 0):
-                                bat_events_no += 1
-                            if power_events not in (None, 0):
-                                pwr_events_no += 1
-                            if sys_events not in (None, 0):
-                                sys_events_no += 1
+        line_str_array_bak = line_str_array
 
-                            data_set       = data_set +1
-                            pwr.append(pwr_array)
-                            line_str_array = []
-                            line_str       = ""
+        power_idx     = -1
+        volt_idx      = -1
+        curr_idx      = -1
+        temp_idx      = -1
+        basic_st_idx  = -1
+        volt_st_idx   = -1
+        curr_st_idx   = -1
+        temp_st_idx   = -1
+        soc_idx       = -1
+        header_valid  = False
 
-                            break
+        for i, line_str in enumerate(line_str_array):
 
-                        except Exception as e:
-                            pytes_serial_log.warning ('PARSING SERIAL - error handling message: '+str(e))
-
-            if data_set != power:
+            if line_str.strip().startswith('Command completed'):
                 break
+
+            # First line is the pwr table header.
+            # split() is used because Pytes/Pylontech headers do not always
+            # use two spaces between every column name.
+            if i == 0:
+                line = line_str.strip().split()
+
+                for j, value in enumerate(line):
+                    if value == 'Power':
+                        power_idx = j
+                    elif value == 'Volt':
+                        volt_idx = j
+                    elif value == 'Curr':
+                        curr_idx = j
+                    elif value == 'Tempr':
+                        temp_idx = j
+                    elif value == 'Base.St':
+                        basic_st_idx = j
+                    elif value == 'Volt.St':
+                        volt_st_idx = j
+                    elif value == 'Curr.St':
+                        curr_st_idx = j
+                    elif value == 'Temp.St':
+                        temp_st_idx = j
+                    elif value == 'Coulomb':
+                        soc_idx = j
+
+                if (
+                    power_idx != -1
+                    and volt_idx != -1
+                    and curr_idx != -1
+                    and temp_idx != -1
+                    and basic_st_idx != -1
+                    and volt_st_idx != -1
+                    and curr_st_idx != -1
+                    and temp_st_idx != -1
+                    and soc_idx != -1
+                ):
+                    header_valid = True
+                else:
+                    break
+
+            else:
+                if header_valid != True:
+                    break
+
+                line = line_str.strip().split()
+
+                if not line or not line[0].isdigit():
+                    continue
+
+                power = int(line[power_idx])
+
+                if power > powers:
+                    continue
+
+                if power != data_set + 1:
+                    break
+
+                if line[basic_st_idx] == 'Absent':
+                    break
+
+                try:
+                    voltage    = round(int(line[volt_idx]) / 1000, 2)
+                    current    = round(int(line[curr_idx]) / 1000, 2)
+                    temp       = round(int(line[temp_idx]) / 1000, 1)
+                    soc        = int(line[soc_idx].replace('%', ''))
+                except ValueError as e:
+                    pytes_serial_log.debug(
+                        'PARSING SERIAL - pwr invalid data: ' + str(e)
+                    )
+                    break
+
+                basic_st   = line[basic_st_idx]
+                volt_st    = line[volt_st_idx]
+                current_st = line[curr_st_idx]
+                temp_st    = line[temp_st_idx]
+
+                print('power           :', power)
+                print('voltage         :', voltage)
+                print('current         :', current)
+                print('temperature     :', temp)
+                print('soc [%]         :', soc)
+                print('basic_st        :', basic_st)
+                print('volt_st         :', volt_st)
+                print('current_st      :', current_st)
+                print('temp_st         :', temp_st)
+                print('---------------------------')
+
+                pwr_array = {
+                    'power': power,
+                    'voltage': voltage,
+                    'current': current,
+                    'temperature': temp,
+                    'soc': soc,
+                    'basic_st': basic_st,
+                    'volt_st': volt_st,
+                    'current_st': current_st,
+                    'temp_st': temp_st
+                }
+
+                data_set = data_set + 1
+                pwr.append(pwr_array)
 
         if data_set == powers:
             statistics()
-            errors='false'
-            trials=0
+            errors = 'false'
+            trials = 0
 
-            print ('...serial parsing: ok')
+            print('...serial parsing: ok')
 
         else:
             errors = 'true'
-            trials = trials+1
+            trials = trials + 1
 
             if trials <= 3:
-                print ('...incomplete data sets -> try again')
-                pytes_serial_log.debug ('PARSING SERIAL - power:' + str(power) + ' trial:' + str(trials) + ' err_no:' + str(errors_no) + ' incomplete data sets data set:' + str(data_set)  + ' line_str_array:' + str(line_str_array_bak))
+                print('...incomplete data sets -> try again')
+                pytes_serial_log.debug(
+                    'PARSING SERIAL - trial:' + str(trials)
+                    + ' err_no:' + str(errors_no)
+                    + ' incomplete data sets data_set:' + str(data_set)
+                    + ' line_str_array:' + str(line_str_array_bak)
+                )
 
-                parsing_serial()
+                parse_pwr()
 
             else:
-                print ('...incomplete data set -> not solved, close serial, skip set')
-                pytes_serial_log.error ('PARSING SERIAL - power:' + str(power) + ' trial:' + str(trials) + ' err_no:'+str(errors_no) + ' incomplete data sets: ' + str(data_set)  + ' line_str_array:' + str(line_str_array_bak))
+                print('...incomplete data set -> not solved, close serial, skip set')
+                pytes_serial_log.error(
+                    'PARSING SERIAL - trial:' + str(trials)
+                    + ' err_no:' + str(errors_no)
+                    + ' incomplete data sets:' + str(data_set)
+                    + ' line_str_array:' + str(line_str_array_bak)
+                )
 
                 if ser.is_open == True:
                     ser.close()
@@ -472,11 +483,11 @@ def parsing_serial():
         errors = 'true'
 
         print('...parsing serial error: ' + str(e))
-        pytes_serial_log.error ('PARSING SERIAL - error handling message: '+str(e))
+        pytes_serial_log.error('PARSING SERIAL - error handling message: '+str(e))
 
         if ser.is_open == True:
             ser.close()
-            print ('...close serial')
+            print('...close serial')
 
         return
 
@@ -503,12 +514,12 @@ def statistics():
         sys_soc      = int(sys_soc / powers)
         sys_basic_st = pwr[0]['basic_st']                                           # status will be the master status
         sys_temp     = round((sys_temp / powers), 1)
-        
+
     except Exception as e:
         errors = 'true'
         print('...json serialization error: ' + str(e))
 
-def json_serialize():
+def serialize_json():
     try:
         global parsing_time
         global loops_no
@@ -516,9 +527,6 @@ def json_serialize():
         global errors
         global json_data
         global json_data_old
-        global bat_events_no
-        global pwr_events_no
-        global sys_events_no
         global bats
 
         json_data_old = json_data
@@ -534,9 +542,6 @@ def json_serialize():
                    'serial_stat': {'uptime':uptime,
                                    'loops':loops_no,
                                    'errors': errors_no,
-                                   'bat_events_no': bat_events_no,
-                                   'pwr_events_no': pwr_events_no,
-                                   'sys_events_no': sys_events_no,
                                    'efficiency' :round((1-(errors_no/loops_no))*100,2),
                                    'ser_round_trip':round(parsing_time,2)}
                    }
@@ -547,11 +552,11 @@ def json_serialize():
 
     except Exception as e:
         print('...json serialization error: ' + str(e))
-        pytes_serial_log.error ('JSON SERIALIZATION - error handling message: ' + str(e))
+        pytes_serial_log.error('JSON SERIALIZATION - error handling message: ' + str(e))
 
         errors = 'true'
 
-def maria_db():
+def write_mariadb():
     try:
         mydb = mariadb.connect(host=host,port=db_port,user=user,password=password,database=database)
 
@@ -564,13 +569,7 @@ def maria_db():
                      pwr[power-1]['basic_st'],
                      pwr[power-1]['volt_st'],
                      pwr[power-1]['current_st'],
-                     pwr[power-1]['temp_st'],
-                     pwr[power-1]['coul_st'],
-                     pwr[power-1]['soh_st'],
-                     pwr[power-1]['heater_st'],
-                     pwr[power-1]['bat_events'],
-                     pwr[power-1]['power_events'],
-                     pwr[power-1]['sys_events'])
+                     pwr[power-1]['temp_st'])
 
             sql="INSERT INTO pwr_data\
             (power,\
@@ -580,25 +579,19 @@ def maria_db():
             basic_st,\
             volt_st,\
             current_st,\
-            temp_st,\
-            coul_st,\
-            soh_st,\
-            heater_st,\
-            bat_events,\
-            power_events,\
-            sys_events) \
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+            temp_st) \
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)"
             mycursor = mydb.cursor()
             mycursor.execute(sql, values)
             mydb.commit()
 
         mycursor.close()
         mydb.close()
-        print ('...mariadb upload: ok')
+        print('...mariadb upload: ok')
 
     except Exception as e:
         print('...mariadb writing error: '+ str(e))
-        pytes_serial_log.warning ('MARIADB WRITING - error handling message: '+ str(e))
+        pytes_serial_log.warning('MARIADB WRITING - error handling message: '+ str(e))
 
 def mqtt_discovery():
     try:
@@ -641,7 +634,7 @@ def mqtt_discovery():
             publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
             b = "...mqtt auto discovery - system sensors:" + str(round(config/max_config *100)) +" %"
-            print (b, end="\r")
+            print(b, end="\r")
 
             msg                  = {}
             config               = config +1
@@ -680,11 +673,10 @@ def mqtt_discovery():
                 publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
                 b = "...mqtt auto discovery - battery sensors:" + str(round(config/max_config *100)) +" %"
-                print (b, end="\r")
+                print(b, end="\r")
 
                 msg                  ={}
                 config               = config +1
-                # max_config = len(ids)+ powers*len(ids)
 
         print("...mqtt auto discovery")
 
@@ -698,7 +690,7 @@ def mqtt_discovery():
                 stat_cla     =["measurement",   "measurement",  "measurement",  None,       None,       None,       None]
                 unit_of_meas =["V",             "°C",           "%",            None,       None,       None,       None]
                 precision    =[3,               1,              0,              None,       None,       None,       None]
-                
+
             elif cells_mon_level == 'medium':
                 names        =["voltage",       "temperature",  "volt_st"]
                 ids          =["voltage",       "temperature",  "volt_st"]
@@ -706,15 +698,15 @@ def mqtt_discovery():
                 stat_cla     =["measurement",   "measurement",       None]
                 unit_of_meas =["V",             "°C",                None]
                 precision    =[3,               1,                   None]
-                
+
             else:
                 names        =["voltage"]
                 ids          =["voltage"]
                 dev_cla      =["voltage"]
                 stat_cla     =["measurement"]
                 unit_of_meas =["V"]
-                precision    =[3]            
-            
+                precision    =[3]
+
             max_config   = max_config + powers*len(ids)*cells
 
             for power in range (1, powers+1):
@@ -745,16 +737,16 @@ def mqtt_discovery():
                         publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
                         b = "...mqtt auto discovery - cell sensors:" + str(round(config/max_config *100)) +" %"
-                        print (b, end="\r")
+                        print(b, end="\r")
 
                         msg                  ={}
                         config               = config +1
-                        
+
             # only for medium and high monitoring level
             if cells_mon_level == 'medium' or cells_mon_level == 'high':
-                
+
                 print("...mqtt auto discovery")
-                
+
                 # define individual cells sensors -- statistics
                 names        =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
                 ids          =["voltage_delta", "voltage_min",  "voltage_max",  "temperature_delta",    "temperature_min",  "temperature_max"]
@@ -787,7 +779,7 @@ def mqtt_discovery():
                         publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
                         b = "...mqtt auto discovery - statistics sensors:" + str(round(config/max_config *100)) +" %"
-                        print (b, end="\r")
+                        print(b, end="\r")
 
                         msg                  ={}
                         config               = config +1
@@ -796,7 +788,7 @@ def mqtt_discovery():
 
     except Exception as e:
         print('...mqtt_discovery error: ' + str(e))
-        pytes_serial_log.warning ('MQTT DISCOVERY - error handling message: '  + str(e))
+        pytes_serial_log.warning('MQTT DISCOVERY - error handling message: '  + str(e))
 
 def mqtt_publish():
     try:
@@ -819,7 +811,7 @@ def mqtt_publish():
                 message = json.dumps(value)
             else:
                 message = json.dumps({'value': value})
-                
+
             publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
         # Publish device topics
@@ -845,7 +837,7 @@ def mqtt_publish():
                     message = json.dumps(value)
                 else:
                     message = json.dumps({'value': value})
-                    
+
                 publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
 
         if cells_monitoring == 'true':
@@ -875,7 +867,7 @@ def mqtt_publish():
                         message = json.dumps({'value': value})
 
                     publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0)
-                    
+
                 # Publish cell topics
                 for cell in device["cells"]:
                     cell_idx = str(cell["cell"] - 1)
@@ -892,7 +884,7 @@ def mqtt_publish():
                             len(json_data_old["cells_data"]) == powers and
                             len(json_data["cells_data"][device["power"] - 1]["cells"]) == cells and
                             len(json_data_old["cells_data"][device["power"] - 1]["cells"]) == cells and
-                            value == json_data_old["cells_data"][device["power"] - 1]["cells"][cell["cell"] - 1][key]
+                            value == json_data_old["cells_data"][device["power"] - 1]["cells"][cell["cell"] - 1].get(key)
                         ):
                             continue
 
@@ -901,34 +893,32 @@ def mqtt_publish():
                             message = json.dumps(value)
                         else:
                             message = json.dumps({'value': value})
-                            
+
                         publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0)
 
-        print ('...mqtt publish  : ok')
+        print('...mqtt publish  : ok')
 
     except Exception as e:
-        print ('...mqtt publish error: ' + str(e))
-        pytes_serial_log.warning ('MQTT PUBLISH - error handling message: ' + str(e))
+        print('...mqtt publish error: ' + str(e))
+        pytes_serial_log.warning('MQTT PUBLISH - error handling message: ' + str(e))
 
-def parsing_bat(power):
+def parse_bat(power, retry=0):
     try:
         global line_str_array
         global bat
         bat = []
-        
+
         req  = ('bat '+ str(power))
         size = 1000
-        write_return = serial_write(req,size)
+        write_return = write_serial(req,size)
 
         if write_return != 'true':
             return "false"
 
-        read_return = serial_read('Battery', END_MARKERS)
+        read_return = read_serial('Battery', END_MARKERS)
 
         if read_return != 'true' or not line_str_array:
             return "false"
-
-        #pytes_serial_log.debug("parsing_bat: line_str_array = " + json.dumps(line_str_array, indent=2))
 
         cell_idx        = -1
         volt_idx        = -1
@@ -943,11 +933,11 @@ def parsing_bat(power):
         is_pylontech    = False
 
         for i, line_str in enumerate(line_str_array):
-            
+
             # Last line is command completed message
             if line_str.strip().startswith('Command completed'):
                 break
-            
+
             # First line is table header
             elif i == 0:
                 line = re.split(r'\s{2,}', line_str.strip())   # type: list[str] # Each column is delimited by at least 2 spaces
@@ -1009,25 +999,42 @@ def parsing_bat(power):
                     cell_data['coulomb']        = int(line[coulomb_idx][:-4]) / 1000      # Ah
 
                 bat.append(cell_data)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+
         return "true"
 
+    except (ValueError, IndexError) as e:
+        if retry < 3:
+            pytes_serial_log.debug(
+                'PARSING BAT - power:' + str(power)
+                + ' retry:' + str(retry + 1)
+                + ' invalid data: ' + str(e)
+            )
+            return parse_bat(power, retry + 1)
+
+        pytes_serial_log.warning(
+            'PARSING BAT - power:' + str(power)
+            + ' invalid data after retries: ' + str(e)
+        )
+        return "false"
+
     except Exception as e:
-        pytes_serial_log.info ('PARSING BAT - error handling message: ' + str(e))
+        pytes_serial_log.warning('PARSING BAT - error handling message: ' + str(e))
+        return "false"
 
 def check_cells():
     try:
         global bats
-        
+
         for power in range (1, powers+1):
-            if parsing_bat(power)=="true":
-                
+            if parse_bat(power)=="true":
+
                 # statistics available only for medium and high monitoring level
                 if cells_mon_level=='medium' or cells_mon_level=='high':
                    # statistics -- calculate min,mix of cells data of each power
-                    output = {"voltage" : [float('inf'),float('-inf')],
-                              "temperature" : [float('inf'),float('-inf')]
-                              }
+                    output = {
+                        "voltage" : [float('inf'),float('-inf')],
+                        "temperature" : [float('inf'),float('-inf')]
+                    }
 
                     for item in bat:
                         for each in output.keys():
@@ -1047,7 +1054,7 @@ def check_cells():
                         'temperature_max':output['temperature'][1],
                         'cells':bat
                     }
-                    
+
                 else:
                     # statistics not available for 'low' level monitoring
                     stat = {
@@ -1061,11 +1068,11 @@ def check_cells():
                 pass
 
     except Exception as e:
-        pytes_serial_log.info ('CHECK CELLS - error handling message: ' + str(e))
+        pytes_serial_log.warning('CHECK CELLS - error handling message: ' + str(e))
 
 # -------------------- SERIAL INITIALIZATION ------------------------
 try:
-    ser = serial.Serial (port=serial_port,\
+    ser = serial.Serial(port=serial_port,\
           baudrate=serial_baudrate,\
           parity=serial.PARITY_NONE,\
           stopbits=serial.STOPBITS_ONE,\
@@ -1076,7 +1083,7 @@ try:
 
 except Exception as e:
     print('...serial connection error: ' + str(e))
-    pytes_serial_log.error ('OPEN SERIAL - error handling message: ' + str(e))
+    pytes_serial_log.error('OPEN SERIAL - error handling message: ' + str(e))
     print('...program initialisation failed -- exit')
 
     exit()
@@ -1087,13 +1094,12 @@ if MQTT_active =='true':  mqtt_discovery()
 # -------------------- MAIN LOOP ------------------------------------
 print('...program initialisation completed starting main loop')
 
-pytes_serial_log.info ('START - ' + version)
-battery_events_log.info ('START - ' + version)
+pytes_serial_log.info('START - ' + version)
 
 json_data = {}
 
 # define time interval when full set of data will be send
-FULL_UPDATE_EVERY_MIN = 5     
+FULL_UPDATE_EVERY_MIN = 5
 last_full_update = 0.0
 
 while True:
@@ -1104,33 +1110,31 @@ while True:
 
         now            = datetime.datetime.now()
         TimeStamp      = now.strftime("%Y-%m-%d %H:%M:%S")
-        print ('relay local time:', TimeStamp)
+        print('relay local time:', TimeStamp)
 
         uptime = round((time.time()- up_time)/86400, 3)
-        print ('serial uptime   :', uptime)
+        print('serial uptime   :', uptime)
         start_time = time.time()
 
         if errors == 'false':
             parsing_time = time.time()
-            parsing_serial()
+            parse_pwr()
             parsing_time = time.time() - parsing_time
-            # print(round(parsing_time, 2)) #debug
-            
+
         if cells_monitoring == 'true' and errors == 'false':
             check_cells_time = time.time()
             check_cells()
             check_cells_time = (time.time() - check_cells_time)
             parsing_time     = parsing_time + check_cells_time
-            # print(round(check_cells_time, 2)) #debug
 
 
-            
+
         if errors == 'false':
-            json_serialize()
+            serialize_json()
 
         if errors == 'false' and SQL_active == 'true':
-            maria_db()
-            
+            write_mariadb()
+
         if errors == 'false' and MQTT_active == 'true':
             now_ts = time.time()
 
@@ -1138,19 +1142,16 @@ while True:
             if (now_ts - last_full_update) >= FULL_UPDATE_EVERY_MIN * 60:
                 json_data_old = None            # disable deduplication once
                 last_full_update = now_ts
-                pytes_serial_log.debug ('MAIN LOOP - MQTT full update triggered')
+                pytes_serial_log.debug('MAIN LOOP - MQTT full update triggered')
 
-            mqtt_publish_time = time.time()
             mqtt_publish()
-            mqtt_publish_time = (time.time() - mqtt_publish_time)  
 
         if errors != 'false' :
             errors_no = errors_no + 1
 
-        print ('...serial stat   :', 'loops:' , loops_no, 'errors:', errors_no, 'efficiency:', round((1-(errors_no/loops_no))*100, 2))
-        print ('...serial stat   :', 'bat events_no:' , bat_events_no, 'pwr events_no:', pwr_events_no, 'sys events_no:', sys_events_no)
-        print ('...serial stat   :', 'parsing round-trip:' , round(parsing_time, 2))
-        print ('------------------------------------------------------')
+        print('...serial stat   :', 'loops:' , loops_no, 'errors:', errors_no, 'efficiency:', round((1-(errors_no/loops_no))*100, 2))
+        print('...serial stat   :', 'parsing round-trip:' , round(parsing_time, 2))
+        print('------------------------------------------------------')
 
         # clear variables
         pwr        = []
