@@ -21,7 +21,7 @@ cells                  = int(config.get('battery_info', 'cells'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v2.0.0"
+sw_ver                = "PytesSerial v2.0.0_20260805"
 version               = sw_ver
 
 SQL_active            = config.get('Maria DB connection', 'SQL_active')
