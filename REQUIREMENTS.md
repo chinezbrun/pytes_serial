@@ -1,4 +1,4 @@
-- Python >3.5 (tested 3.10)
+- Python >3.5 (tested 3.11)
 - Install the required Python modules:
     - Option A - System install:
         ```
