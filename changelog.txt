@@ -3,7 +3,7 @@ CHANGELOG
 
 All notable changes to pytes-serial are documented in this file.
 
-2.0.0 | 2026-09-04
+2.0.0 | 2026-09-05
 - Consolidated PWR parsing using a single `pwr` command.
 - Improved PWR and BAT invalid-data retry handling.
 - Removed deprecated status/event fields and obsolete event counters.
