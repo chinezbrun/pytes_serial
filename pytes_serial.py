@@ -296,7 +296,7 @@ def parse_pwr():
                     rw_failure = 'read:false'
 
                 pytes_serial_log.debug(
-                    'PARSING SERIAL - pwr ' + rw_failure
+                    'PARSING PWR - pwr ' + rw_failure
                     + ' rw_trial:' + str(rw_trials)
                     + ' err_no:' + str(errors_no)
                     + ' in_buffer:' + str(buffer)
@@ -310,7 +310,7 @@ def parse_pwr():
                 print('...timeouts -> close serial, skip set')
 
                 pytes_serial_log.error(
-                    'PARSING SERIAL - pwr'
+                    'PARSING PWR - pwr'
                     + ' rw_trial:' + str(rw_trials)
                     + ' err_no:' + str(errors_no)
                     + ' timeouts -> close serial in_buffer:' + str(buffer)
@@ -408,7 +408,7 @@ def parse_pwr():
                     soc        = int(line[soc_idx].replace('%', ''))
                 except ValueError as e:
                     pytes_serial_log.debug(
-                        'PARSING SERIAL - pwr invalid data: ' + str(e)
+                        'PARSING PWR - pwr invalid data: ' + str(e)
                     )
                     break
 
@@ -457,7 +457,7 @@ def parse_pwr():
             if trials <= 3:
                 print('...incomplete data sets -> try again')
                 pytes_serial_log.debug(
-                    'PARSING SERIAL - trial:' + str(trials)
+                    'PARSING PWR - trial:' + str(trials)
                     + ' err_no:' + str(errors_no)
                     + ' incomplete data sets data_set:' + str(data_set)
                     + ' line_str_array:' + str(line_str_array_bak)
@@ -468,7 +468,7 @@ def parse_pwr():
             else:
                 print('...incomplete data set -> not solved, close serial, skip set')
                 pytes_serial_log.error(
-                    'PARSING SERIAL - trial:' + str(trials)
+                    'PARSING PWR - trial:' + str(trials)
                     + ' err_no:' + str(errors_no)
                     + ' incomplete data sets:' + str(data_set)
                     + ' line_str_array:' + str(line_str_array_bak)
@@ -482,8 +482,8 @@ def parse_pwr():
     except Exception as e:
         errors = 'true'
 
-        print('...parsing serial error: ' + str(e))
-        pytes_serial_log.error('PARSING SERIAL - error handling message: '+str(e))
+        print('...PARSING PWR error: ' + str(e))
+        pytes_serial_log.error('PARSING PWR - error handling message: '+str(e))
 
         if ser.is_open == True:
             ser.close()
@@ -1158,3 +1158,4 @@ while True:
         bats       = []
         errors     = 'false'
         trials     = 0
+
