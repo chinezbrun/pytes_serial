@@ -57,12 +57,14 @@ database         =pytes
 #MQTT_broker                       # mqtt broker address -- ex: 192.168.0.100
 #MQTT_username                     # your mqtt username or leave it blank if no authentication required
 #MQTT_password                     # your mqtt password or leave it blank if no authentication required
+#MQTT_availability_threshold       # default=10 -- consecutive failed battery readings before sensors become unavailable in Home Assistant; 0 disables automatic offline
 
 MQTT_active     =false
 MQTT_broker     =192.168.0.100
 MQTT_port       =1883
 MQTT_username   =
 MQTT_password   =
+MQTT_availability_threshold = 10
 
 #---------------------------------------------------------------
 [logging]
