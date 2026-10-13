@@ -21,7 +21,7 @@ cells                  = int(config.get('battery_info', 'cells'))
 dev_name              = config.get('battery_info', 'dev_name')
 manufacturer          = config.get('battery_info', 'manufacturer')
 model                 = config.get('battery_info', 'model')
-sw_ver                = "PytesSerial v2.0.0_20260805"
+sw_ver                = "PytesSerial v2.1.0_20261013"
 version               = sw_ver
 
 SQL_active            = config.get('Maria DB connection', 'SQL_active')
@@ -36,6 +36,14 @@ MQTT_broker           = config.get('MQTT', 'MQTT_broker')
 MQTT_port             = int(config.get('MQTT', 'MQTT_port'))
 MQTT_username         = config.get('MQTT', 'MQTT_username')
 MQTT_password         = config.get('MQTT', 'MQTT_password')
+MQTT_availability_threshold = int(config.get('MQTT', 'MQTT_availability_threshold', fallback='10'))
+if MQTT_availability_threshold < 0:
+    raise ValueError('MQTT_availability_threshold must be >= 0')
+MQTT_availability_topic = "pytes_serial/" + dev_name + "/availability"
+MQTT_payload_online  = "online"
+MQTT_payload_offline = "offline"
+mqtt_availability_state = None
+mqtt_failed_cycles = 0
 
 LOGGING_LEVEL          = config.get('logging', 'LOGGING_LEVEL')
 log_level_info = {'logging.DEBUG': logging.DEBUG,
@@ -593,6 +601,24 @@ def write_mariadb():
         print('...mariadb writing error: '+ str(e))
         pytes_serial_log.warning('MARIADB WRITING - error handling message: '+ str(e))
 
+def mqtt_publish_availability(state):
+    global mqtt_availability_state
+
+    if MQTT_active != 'true' or state == mqtt_availability_state:
+        return
+
+    MQTT_auth = None
+    if len(MQTT_username) > 0:
+        MQTT_auth = {'username': MQTT_username, 'password': MQTT_password}
+
+    try:
+        publish.single(MQTT_availability_topic, state, hostname=MQTT_broker,
+                       port=MQTT_port, auth=MQTT_auth, qos=0, retain=True)
+        mqtt_availability_state = state
+        print('...mqtt availability:', state)
+    except Exception as e:
+        pytes_serial_log.warning('MQTT AVAILABILITY - publish error: ' + str(e))
+
 def mqtt_discovery():
     try:
         config    = 1
@@ -629,6 +655,9 @@ def mqtt_discovery():
 
             msg ["val_tpl"]      = "{{ value_json.value }}"
             msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}
+            msg["avty_t"]       = MQTT_availability_topic
+            msg["pl_avail"]     = MQTT_payload_online
+            msg["pl_not_avail"] = MQTT_payload_offline
             message              = json.dumps(msg)
 
             publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
@@ -668,6 +697,9 @@ def mqtt_discovery():
 
                 msg ["val_tpl"]      = "{{ value_json.value }}"
                 msg ["dev"]          = {"identifiers": [dev_name],"manufacturer": manufacturer,"model": model,"name": dev_name,"sw_version": sw_ver}
+                msg["avty_t"]       = MQTT_availability_topic
+                msg["pl_avail"]     = MQTT_payload_online
+                msg["pl_not_avail"] = MQTT_payload_offline
                 message              = json.dumps(msg)
 
                 publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
@@ -732,6 +764,9 @@ def mqtt_discovery():
 
                         msg ["val_tpl"]      = "{{ value_json.value }}"
                         msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
+                        msg["avty_t"]       = MQTT_availability_topic
+                        msg["pl_avail"]     = MQTT_payload_online
+                        msg["pl_not_avail"] = MQTT_payload_offline
                         message              = json.dumps(msg)
 
                         publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
@@ -774,6 +809,9 @@ def mqtt_discovery():
 
                         msg ["val_tpl"]      = "{{ value_json.value }}"
                         msg ["dev"]          = {"identifiers": [dev_name+"_cells"],"manufacturer": manufacturer,"model": model,"name": dev_name+"_cells","sw_version": sw_ver}
+                        msg["avty_t"]       = MQTT_availability_topic
+                        msg["pl_avail"]     = MQTT_payload_online
+                        msg["pl_not_avail"] = MQTT_payload_offline
                         message              = json.dumps(msg)
 
                         publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0, retain=True)
@@ -897,10 +935,12 @@ def mqtt_publish():
                         publish.single(state_topic, message, hostname=MQTT_broker, port= MQTT_port, auth=MQTT_auth, qos=0)
 
         print('...mqtt publish  : ok')
+        return True
 
     except Exception as e:
         print('...mqtt publish error: ' + str(e))
         pytes_serial_log.warning('MQTT PUBLISH - error handling message: ' + str(e))
+        return False
 
 def parse_bat(power, retry=0):
     try:
@@ -1101,6 +1141,7 @@ json_data = {}
 # define time interval when full set of data will be send
 FULL_UPDATE_EVERY_MIN = 5
 last_full_update = 0.0
+mqtt_retry_full_update = False
 
 while True:
     time.sleep(0.2)
@@ -1120,6 +1161,15 @@ while True:
             parsing_time = time.time()
             parse_pwr()
             parsing_time = time.time() - parsing_time
+
+            # Track battery communication independently of JSON, SQL and MQTT errors.
+            pwr_ok = errors == 'false' and len(pwr) == powers
+            if pwr_ok:
+                mqtt_failed_cycles = 0
+            else:
+                mqtt_failed_cycles += 1
+                if MQTT_availability_threshold > 0 and mqtt_failed_cycles >= MQTT_availability_threshold:
+                    mqtt_publish_availability(MQTT_payload_offline)
 
         if cells_monitoring == 'true' and errors == 'false':
             check_cells_time = time.time()
@@ -1144,7 +1194,17 @@ while True:
                 last_full_update = now_ts
                 pytes_serial_log.debug('MAIN LOOP - MQTT full update triggered')
 
-            mqtt_publish()
+            # After an offline period or failed publish, resend all retained state values.
+            if mqtt_availability_state != MQTT_payload_online or mqtt_retry_full_update:
+                json_data_old = None
+
+            mqtt_published = mqtt_publish()
+            if mqtt_published and pwr_ok:
+                mqtt_retry_full_update = False
+                mqtt_publish_availability(MQTT_payload_online)
+            elif not mqtt_published:
+                # Do not mark the battery communication as failed on an MQTT error.
+                mqtt_retry_full_update = True
 
         if errors != 'false' :
             errors_no = errors_no + 1
