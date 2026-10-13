@@ -3,6 +3,13 @@ CHANGELOG
 
 All notable changes to pytes-serial are documented in this file.
 
+2.1.0 | 2026-10-12
+- Added retained MQTT availability (online/offline) for Home Assistant sensors.
+- Sensors become unavailable after a configurable number of consecutive failed battery communication cycles 
+- Availability automatically returns online after valid battery data is successfully published to MQTT.
+- Added bank-level availability to MQTT Auto Discovery for all sensors.
+- Improved MQTT publish failure handling and recovery.
+
 2.0.0 | 2026-09-05
 - Consolidated PWR parsing using a single `pwr` command.
 - Improved PWR and BAT invalid-data retry handling.
